@@ -40,13 +40,28 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     # Third party
     'rest_framework',
-
+    'django_filters',
     # Your apps — ORDER MATTERS: accounts first
     'accounts',
     'patients',
     'appointments',
     'xrays',
+    'cloudinary',
+    'cloudinary_storage',
 ]
+
+import cloudinary
+
+cloudinary.config(
+    cloud_name = config('CLOUDINARY_CLOUD_NAME'),
+    api_key = config('CLOUDINARY_API_KEY'),
+    api_secret = config('CLOUDINARY_API_SECRET'),
+)
+
+# Media storage — local by default, cloud when needed
+DEFAULT_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'  # local
+# Switch to this when you want cloud:
+# DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
 
 AUTH_USER_MODEL = 'accounts.CustomUser'
@@ -58,6 +73,9 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',  # all endpoints protected by default
+    ],
+    'DEFAULT_FILTER_BACKENDS': [
+        'django_filters.rest_framework.DjangoFilterBackend',
     ],
 }
 
