@@ -44,7 +44,7 @@ INSTALLED_APPS = [
     # Your apps — ORDER MATTERS: accounts first
     'accounts',
     'patients',
-    'appointments',
+    'appointments.apps.AppointmentsConfig',
     'xrays',
     'cloudinary',
     'cloudinary_storage',
@@ -59,7 +59,14 @@ cloudinary.config(
 )
 
 # Media storage — local by default, cloud when needed
-DEFAULT_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'  # local
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}  # local
 # Switch to this when you want cloud:
 # DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
