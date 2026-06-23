@@ -26,7 +26,7 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', cast=bool, default=True)
 
-ALLOWED_HOSTS = [config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')]
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,.app.github.dev').split(',')
 
 
 # Application definition
@@ -184,3 +184,15 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# settings.py
+
+CSRF_TRUSTED_ORIGINS = [
+    'https://*.app.github.dev',
+    'https://*.githubpreview.dev',
+    'https://localhost:8000',
+    'http://localhost:8000',
+]
+
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
