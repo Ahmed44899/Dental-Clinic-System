@@ -1,0 +1,16 @@
+[
+    {
+        "xray_id": "XR001",
+        "patient_name": "Ahmed Ali",
+        "image_url": "https://example.com/xray1.jpg",
+        "taken_at": "2024-01-15T10:30:00Z",
+        "description": "Upper molar periapical"
+    },
+    {
+        "xray_id": "XR002",
+        "patient_name": "NonexistentPatient",
+        "image_url": "https://example.com/xray2.jpg",
+        "taken_at": "2024-01-16T11:00:00Z",
+        "description": "Full mouth panoramic"
+    }
+]
