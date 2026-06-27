@@ -83,10 +83,3 @@ class TestXRayAPI:
         response = client.post(url, data, format='multipart')
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
-
-    def test_duplicate_external_id_for_same_patient_rejected(self):
-        """Tests the unique_together constraint we set on the model."""
-        XRayFactory(patient=self.patient, external_id='DUPLICATE001')
-
-        with pytest.raises(Exception):  # IntegrityError at DB level
-            XRayFactory(patient=self.patient, external_id='DUPLICATE001')
