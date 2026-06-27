@@ -83,3 +83,90 @@ class TestXRayAPI:
         response = client.post(url, data, format='multipart')
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+import json
+import tempfile
+from django.core.management import call_command
+from io import StringIO
+
+
+@pytest.mark.django_db
+class TestImportXraysCommand:
+
+    def setup_method(self):
+        self.patient = PatientProfileFactory(full_name='Ahmed Ali')
+
+    def _write_temp_json(self, data):
+        """Helper — creates a temporary JSON file for the command to read."""
+        tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+        json.dump(data, tmp)
+        tmp.close()
+        return tmp.name
+
+    def test_import_creates_xray_for_matching_patient(self):
+        data = [{
+            "xray_id": "XR100",
+            "patient_name": "Ahmed Ali",
+            "image_url": "https://example.com/test.jpg",
+            "taken_at": "2024-01-15T10:30:00Z",
+            "description": "Test scan"
+        }]
+        file_path = self._write_temp_json(data)
+
+        out = StringIO()
+        call_command('import_xrays', f'--source={file_path}', stdout=out)
+
+        assert XRay.objects.filter(patient=self.patient, external_id='XR100').exists()
+        assert 'Imported: 1' in out.getvalue()
+
+    def test_import_skips_already_imported_xray(self):
+        XRayFactory(patient=self.patient, external_id='XR100')
+
+        data = [{
+            "xray_id": "XR100",
+            "patient_name": "Ahmed Ali",
+            "image_url": "https://example.com/test.jpg",
+        }]
+        file_path = self._write_temp_json(data)
+
+        out = StringIO()
+        call_command('import_xrays', f'--source={file_path}', stdout=out)
+
+        # Should still only be 1 record — not duplicated
+        assert XRay.objects.filter(patient=self.patient, external_id='XR100').count() == 1
+        assert 'Skipped: 1' in out.getvalue()
+
+    def test_import_reports_error_for_unknown_patient(self):
+        data = [{
+            "xray_id": "XR999",
+            "patient_name": "Nobody Real",
+            "image_url": "https://example.com/test.jpg",
+        }]
+        file_path = self._write_temp_json(data)
+
+        out = StringIO()
+        call_command('import_xrays', f'--source={file_path}', stdout=out)
+
+        assert not XRay.objects.filter(external_id='XR999').exists()
+        assert 'Errors: 1' in out.getvalue()
+
+    def test_dry_run_does_not_save_anything(self):
+        data = [{
+            "xray_id": "XR200",
+            "patient_name": "Ahmed Ali",
+            "image_url": "https://example.com/test.jpg",
+        }]
+        file_path = self._write_temp_json(data)
+
+        out = StringIO()
+        call_command('import_xrays', f'--source={file_path}', '--dry-run', stdout=out)
+
+        assert not XRay.objects.filter(external_id='XR200').exists()
+        assert 'DRY RUN' in out.getvalue()
+
+    def test_missing_file_reports_error(self):
+        out = StringIO()
+        call_command('import_xrays', '--source=does_not_exist.json', stdout=out)
+
+        assert 'not found' in out.getvalue().lower()
