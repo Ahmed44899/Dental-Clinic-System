@@ -129,19 +129,24 @@ WSGI_APPLICATION = 'dental_clinic.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+import dj_database_url
+
 DATABASES = {
     # 'default': {
     #     'ENGINE': 'django.db.backends.sqlite3',
     #     'NAME': BASE_DIR / 'db.sqlite3',
     # }
-     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME', default='dental_clinic'),
-        'USER': config('DB_USER', default='postgres'),
-        'PASSWORD': config('DB_PASSWORD', default='postgres'),
-        'HOST': config('DB_HOST', default='db'),   # 'db' matches the service name in docker-compose
-        'PORT': config('DB_PORT', default='5432'),
-    }
+    #  'default': {
+    #     'ENGINE': 'django.db.backends.postgresql',
+    #     'NAME': config('DB_NAME', default='dental_clinic'),
+    #     'USER': config('DB_USER', default='postgres'),
+    #     'PASSWORD': config('DB_PASSWORD', default='postgres'),
+    #     'HOST': config('DB_HOST', default='db'),   # 'db' matches the service name in docker-compose
+    #     'PORT': config('DB_PORT', default='5432'),
+    # }
+    'default': dj_database_url.config(
+        default=config('DATABASE_URL', default='sqlite:///db.sqlite3')
+    )
 }
 
 
