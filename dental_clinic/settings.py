@@ -57,10 +57,22 @@ INSTALLED_APPS = [
 ]
 
 import cloudinary
+from urllib.parse import urlparse, unquote
 
-cloudinary_cloud_name = config('CLOUDINARY_CLOUD_NAME', default='')
-cloudinary_api_key = config('CLOUDINARY_API_KEY', default='')
-cloudinary_api_secret = config('CLOUDINARY_API_SECRET', default='')
+cloudinary_cloud_name = config('CLOUDINARY_CLOUD_NAME', default='').strip()
+cloudinary_api_key = config('CLOUDINARY_API_KEY', default='').strip()
+cloudinary_api_secret = config('CLOUDINARY_API_SECRET', default='').strip()
+cloudinary_url = config('CLOUDINARY_URL', default='').strip()
+
+# Render/Cloudinary integrations sometimes provide one CLOUDINARY_URL instead
+# of three separate variables. Support both formats.
+if cloudinary_url and not all((
+    cloudinary_cloud_name, cloudinary_api_key, cloudinary_api_secret,
+)):
+    parsed_cloudinary_url = urlparse(cloudinary_url)
+    cloudinary_cloud_name = parsed_cloudinary_url.hostname or ''
+    cloudinary_api_key = unquote(parsed_cloudinary_url.username or '')
+    cloudinary_api_secret = unquote(parsed_cloudinary_url.password or '')
 
 cloudinary.config(
     cloud_name=cloudinary_cloud_name,
@@ -68,14 +80,14 @@ cloudinary.config(
     api_secret=cloudinary_api_secret,
 )
 
-# On production, configured Cloudinary credentials imply persistent media
-# storage. The flag can still be set explicitly to opt out.
+# Configured Cloudinary credentials imply persistent media storage. Do not tie
+# this to DEBUG: a misconfigured deployment must not silently use ephemeral disk.
 cloudinary_is_configured = all((
     cloudinary_cloud_name, cloudinary_api_key, cloudinary_api_secret,
 ))
 XRAY_CLOUD_UPLOAD_ENABLED = config(
     'XRAY_CLOUD_UPLOAD_ENABLED',
-    default='True' if cloudinary_is_configured and not DEBUG else 'False',
+    default='True' if cloudinary_is_configured else 'False',
 ).strip().lower() in {'1', 'true', 'yes', 'on'}
 
 # Media storage — local by default, cloud when needed

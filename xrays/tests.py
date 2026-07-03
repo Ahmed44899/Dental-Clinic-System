@@ -3,11 +3,19 @@ from rest_framework.test import APIClient
 from rest_framework import status
 from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
+from unittest.mock import patch
 from accounts.factories import CustomUserFactory
 from patients.factories import PatientProfileFactory
 from appointments.factories import AppointmentFactory
 from .factories import XRayFactory
 from .models import XRay
+
+
+@pytest.fixture(autouse=True)
+def disable_cloud_upload_during_tests(settings):
+    """Tests must never send clinical images to an external service."""
+    settings.XRAY_CLOUD_UPLOAD_ENABLED = False
 
 
 def create_test_image():
@@ -48,6 +56,21 @@ class TestXRayAPI:
         xray = XRay.objects.first()
         assert xray.patient == self.patient
         assert xray.image_local  # file was actually saved
+
+    def test_cloud_upload_is_saved_when_enabled(self):
+        with override_settings(XRAY_CLOUD_UPLOAD_ENABLED=True), patch(
+            'xrays.serializers.cloudinary.uploader.upload',
+            return_value={'secure_url': 'https://cloud.example/xray.jpg'},
+        ):
+            response = self.client.post(reverse('xray-list-create'), {
+                'patient': self.patient.id,
+                'image_file': create_test_image(),
+            }, format='multipart')
+
+        assert response.status_code == status.HTTP_201_CREATED
+        xray = XRay.objects.get(pk=response.data['id'])
+        assert xray.image_cloud == 'https://cloud.example/xray.jpg'
+        assert xray.storage_type == 'both'
 
     def test_list_xrays_filtered_by_patient(self):
         other_patient = PatientProfileFactory()
