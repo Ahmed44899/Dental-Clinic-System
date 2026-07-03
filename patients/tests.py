@@ -65,3 +65,10 @@ class TestPatientAPI:
         response = client.get(url)
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_patient_cannot_be_deleted_with_clinical_history(self):
+        patient = PatientProfileFactory()
+        response = self.client.delete(reverse('patient-detail', kwargs={'pk': patient.pk}))
+
+        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+        assert PatientProfile.objects.filter(pk=patient.pk).exists()

@@ -14,8 +14,11 @@ class XRayListCreateView(generics.ListCreateAPIView):
         """
         queryset = XRay.objects.select_related('patient', 'appointment')
         patient_id = self.request.query_params.get('patient')
+        appointment_id = self.request.query_params.get('appointment')
         if patient_id:
             queryset = queryset.filter(patient_id=patient_id)
+        if appointment_id:
+            queryset = queryset.filter(appointment_id=appointment_id)
         return queryset
 
 

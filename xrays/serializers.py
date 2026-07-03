@@ -1,5 +1,6 @@
 from rest_framework import serializers
 import cloudinary.uploader
+from django.conf import settings
 from .models import XRay
 
 
@@ -17,6 +18,15 @@ class XRaySerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'image_local', 'image_cloud', 'imported_at', 'source']
 
+    def validate(self, data):
+        patient = data.get('patient')
+        appointment = data.get('appointment')
+        if appointment and patient and appointment.patient_id != patient.id:
+            raise serializers.ValidationError({
+                'appointment': 'This appointment belongs to a different patient.'
+            })
+        return data
+
     def create(self, validated_data):
         image_file = validated_data.pop('image_file', None)
 
@@ -25,8 +35,10 @@ class XRaySerializer(serializers.ModelSerializer):
             validated_data['image_local'] = image_file
             validated_data['storage_type'] = 'local'
 
-            # Also upload to Cloudinary
+            # Cloud upload is opt-in because X-rays contain sensitive medical data.
             try:
+                if not settings.XRAY_CLOUD_UPLOAD_ENABLED:
+                    raise RuntimeError('Cloud X-ray upload is disabled')
                 upload_result = cloudinary.uploader.upload(
                     image_file,
                     folder=f"dental_clinic/xrays/patient_{validated_data['patient'].id}",
@@ -40,4 +52,3 @@ class XRaySerializer(serializers.ModelSerializer):
 
         validated_data['source'] = 'manual'
         return super().create(validated_data)
-    

@@ -75,6 +75,18 @@ class TestAppointmentCreation:
 
         assert appointment.created_by == self.staff
 
+    def test_dentist_cannot_be_double_booked_at_the_same_time(self):
+        date_time = timezone.now() + timedelta(days=2)
+        AppointmentFactory(dentist=self.dentist, date_time=date_time, status='scheduled')
+        response = self.client.post(reverse('appointment-list-create'), {
+            'patient': self.patient.id,
+            'dentist': self.dentist.id,
+            'date_time': date_time.isoformat(),
+        })
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'date_time' in response.data
+
 
 @pytest.mark.django_db
 class TestInvoicePayment:
@@ -109,3 +121,12 @@ class TestInvoicePayment:
         response = self.client.patch(url, data)
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_appointment_and_invoice_cannot_be_cascade_deleted(self):
+        response = self.client.delete(
+            reverse('appointment-detail', kwargs={'pk': self.appointment.pk})
+        )
+
+        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+        assert Appointment.objects.filter(pk=self.appointment.pk).exists()
+        assert Invoice.objects.filter(appointment=self.appointment).exists()

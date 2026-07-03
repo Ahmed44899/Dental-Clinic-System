@@ -28,7 +28,7 @@ class AppointmentListCreateView(generics.ListCreateAPIView):
         serializer.save(created_by=self.request.user)
 
 
-class AppointmentDetailView(generics.RetrieveUpdateDestroyAPIView):
+class AppointmentDetailView(generics.RetrieveUpdateAPIView):
     serializer_class = AppointmentSerializer
     permission_classes = [permissions.IsAuthenticated]
 

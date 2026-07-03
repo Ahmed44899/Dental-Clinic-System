@@ -67,3 +67,28 @@ class TestLogin:
         response = client.post(url, {'username': 'ahmed', 'password': 'wrongpass'})
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_admin_role_can_register_staff_without_django_staff_flag(self):
+        client = APIClient()
+        clinic_admin = CustomUserFactory(role='admin', is_staff=False)
+        client.force_authenticate(user=clinic_admin)
+
+        response = client.post(reverse('register'), {
+            'username': 'newreception',
+            'password': 'securepass123',
+            'role': 'receptionist',
+        })
+
+        assert response.status_code == status.HTTP_201_CREATED
+
+    def test_authenticated_user_can_get_their_profile(self):
+        client = APIClient()
+        user = CustomUserFactory(role='dentist', first_name='Mina')
+        client.force_authenticate(user=user)
+
+        response = client.get(reverse('current-user'))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['id'] == user.id
+        assert response.data['role'] == 'dentist'
+        assert 'password' not in response.data

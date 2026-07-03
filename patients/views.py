@@ -20,7 +20,7 @@ class PatientListCreateView(generics.ListCreateAPIView):
     ordering_fields = ['full_name', 'created_at']
 
 
-class PatientDetailView(generics.RetrieveUpdateDestroyAPIView):
+class PatientDetailView(generics.RetrieveUpdateAPIView):
     """
     GET    /api/patients/<id>/  → get one patient
     PUT    /api/patients/<id>/  → update fully
@@ -43,7 +43,14 @@ class PatientSearchView(generics.ListAPIView):
     search_fields = ['full_name', 'phone']
 
     def get_queryset(self):
-        return PatientProfile.objects.only('id', 'full_name', 'phone', 'date_of_birth')
+        queryset = PatientProfile.objects.only('id', 'full_name', 'phone', 'date_of_birth')
+        query = self.request.query_params.get('q')
+        if query:
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(full_name__icontains=query) | Q(phone__icontains=query)
+            )
+        return queryset
 
     def get_serializer_class(self):
         from rest_framework import serializers
@@ -54,4 +61,3 @@ class PatientSearchView(generics.ListAPIView):
                 fields = ['id', 'full_name', 'phone', 'date_of_birth']
 
         return PatientSearchSerializer
-    

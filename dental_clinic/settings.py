@@ -20,11 +20,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config('SECRET_KEY')
-
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config('DEBUG', cast=bool, default=True)
+DEBUG = config('DEBUG', default='True').strip().lower() in {
+    '1', 'true', 'yes', 'on', 'debug', 'development',
+}
+
+# Local setup gets a disposable key; production still fails closed without one.
+SECRET_KEY = config(
+    'SECRET_KEY',
+    default='django-insecure-development-only' if DEBUG else None,
+)
 
 ALLOWED_HOSTS = [
     host.strip()
@@ -54,10 +59,15 @@ INSTALLED_APPS = [
 import cloudinary
 
 cloudinary.config(
-    cloud_name = config('CLOUDINARY_CLOUD_NAME'),
-    api_key = config('CLOUDINARY_API_KEY'),
-    api_secret = config('CLOUDINARY_API_SECRET'),
+    cloud_name=config('CLOUDINARY_CLOUD_NAME', default=''),
+    api_key=config('CLOUDINARY_API_KEY', default=''),
+    api_secret=config('CLOUDINARY_API_SECRET', default=''),
 )
+
+# Medical images stay local unless cloud upload is explicitly enabled.
+XRAY_CLOUD_UPLOAD_ENABLED = config(
+    'XRAY_CLOUD_UPLOAD_ENABLED', default='False'
+).strip().lower() in {'1', 'true', 'yes', 'on'}
 
 # Media storage — local by default, cloud when needed
 STORAGES = {
@@ -65,7 +75,7 @@ STORAGES = {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
     },
     "staticfiles": {
-        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }  # local
 # Switch to this when you want cloud:
@@ -95,6 +105,7 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -110,7 +121,7 @@ ROOT_URLCONF = 'dental_clinic.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -129,25 +140,18 @@ WSGI_APPLICATION = 'dental_clinic.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-import dj_database_url
-
-DATABASES = {
-    # 'default': {
-    #     'ENGINE': 'django.db.backends.sqlite3',
-    #     'NAME': BASE_DIR / 'db.sqlite3',
-    # }
-    #  'default': {
-    #     'ENGINE': 'django.db.backends.postgresql',
-    #     'NAME': config('DB_NAME', default='dental_clinic'),
-    #     'USER': config('DB_USER', default='postgres'),
-    #     'PASSWORD': config('DB_PASSWORD', default='postgres'),
-    #     'HOST': config('DB_HOST', default='db'),   # 'db' matches the service name in docker-compose
-    #     'PORT': config('DB_PORT', default='5432'),
-    # }
-    'default': dj_database_url.config(
-        default=config('DATABASE_URL', default='sqlite:///db.sqlite3')
-    )
-}
+database_url = config('DATABASE_URL', default='sqlite:///db.sqlite3')
+if database_url.startswith('sqlite:///'):
+    sqlite_name = database_url[len('sqlite:///'):]
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / sqlite_name,
+        }
+    }
+else:
+    import dj_database_url
+    DATABASES = {'default': dj_database_url.parse(database_url, conn_max_age=600)}
 
 
 # Password validation
@@ -202,3 +206,4 @@ CSRF_TRUSTED_ORIGINS = [
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_DIRS = [BASE_DIR / 'static']

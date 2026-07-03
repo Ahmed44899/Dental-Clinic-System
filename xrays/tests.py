@@ -5,6 +5,7 @@ from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
 from accounts.factories import CustomUserFactory
 from patients.factories import PatientProfileFactory
+from appointments.factories import AppointmentFactory
 from .factories import XRayFactory
 from .models import XRay
 
@@ -59,6 +60,34 @@ class TestXRayAPI:
 
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) == 2
+
+    def test_list_xrays_filtered_by_appointment(self):
+        appointment = AppointmentFactory(patient=self.patient)
+        other_appointment = AppointmentFactory(patient=self.patient)
+        XRayFactory(patient=self.patient, appointment=appointment)
+        XRayFactory(patient=self.patient, appointment=other_appointment)
+        XRayFactory(patient=self.patient, appointment=None)
+
+        response = self.client.get(
+            reverse('xray-list-create'), {'appointment': appointment.id}
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 1
+        assert response.data[0]['appointment'] == appointment.id
+
+    def test_xray_appointment_must_belong_to_selected_patient(self):
+        other_patient = PatientProfileFactory()
+        appointment = AppointmentFactory(patient=other_patient)
+
+        response = self.client.post(reverse('xray-list-create'), {
+            'patient': self.patient.id,
+            'appointment': appointment.id,
+            'description': 'Mismatched record',
+        })
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'appointment' in response.data
 
     def test_xray_cannot_be_updated(self):
         """We designed XRayDetailView as Retrieve+Destroy only — no update allowed."""

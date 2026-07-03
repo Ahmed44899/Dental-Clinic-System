@@ -1,0 +1,73 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Dental clinic workspace for patients, appointments, billing, and X-rays.">
+  <title>Dental Clinic Management Hub</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+</head>
+<body>
+  <section class="login-screen" id="login-screen">
+    <div class="login-art" aria-hidden="true">
+      <div class="art-copy">
+        <div class="brand brand-light"><span class="brand-mark">D</span><span class="brand-name">Dental Clinic Management Hub</span></div>
+        <p class="eyebrow">CLINIC WORKSPACE</p>
+        <h1>Care feels better<br>when work flows.</h1>
+        <p>A calm, focused home for your patients, schedule, imaging, and payments.</p>
+      </div>
+      <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+      <div class="tooth-shape">✦</div>
+    </div>
+    <div class="login-panel">
+      <form class="login-card" id="login-form" method="post" action="/api/accounts/login/">
+        <div class="mobile-brand brand"><span class="brand-mark">D</span><span class="brand-name">Dental Clinic Management Hub</span></div>
+        <p class="eyebrow">WELCOME BACK</p>
+        <h2>Sign in to your clinic</h2>
+        <p class="muted">Use your staff account to continue.</p>
+        <label>Username<input name="username" autocomplete="username" required autofocus placeholder="e.g. dr.sarah"></label>
+        <label>Password<input type="password" name="password" autocomplete="current-password" required placeholder="Your password"></label>
+        <p class="form-error" id="login-error" role="alert"></p>
+        <button class="btn btn-primary btn-block" type="submit"><span>Sign in</span><span>→</span></button>
+        <p class="login-help">Need access? Ask your clinic administrator to create an account.</p>
+      </form>
+    </div>
+  </section>
+
+  <div class="app-shell hidden" id="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand"><span class="brand-mark">D</span><span class="brand-name">Dental Clinic Management Hub</span></div>
+      <nav aria-label="Main navigation">
+        <button class="nav-item active" data-view="dashboard"><span class="nav-icon">⌂</span>Overview</button>
+        <p class="nav-label">CLINIC</p>
+        <button class="nav-item" data-view="patients"><span class="nav-icon">♙</span>Patients</button>
+        <button class="nav-item" data-view="appointments"><span class="nav-icon">□</span>Appointments</button>
+        <button class="nav-item" data-view="xrays"><span class="nav-icon">◇</span>X-rays</button>
+        <p class="nav-label">PRACTICE</p>
+        <button class="nav-item" data-view="team"><span class="nav-icon">♧</span>Team</button>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="user-chip">
+          <span class="avatar" id="user-avatar">ST</span>
+          <span><strong id="user-name">Staff member</strong><small id="user-role">Clinic staff</small></span>
+        </div>
+        <button class="icon-btn" id="logout-btn" title="Sign out" aria-label="Sign out">↗</button>
+      </div>
+    </aside>
+    <div class="scrim" id="scrim"></div>
+    <section class="workspace">
+      <header class="topbar">
+        <button class="menu-btn" id="menu-btn" aria-label="Open menu">☰</button>
+        <div><p class="eyebrow" id="page-kicker">FRIDAY, JULY 3</p><h2 id="page-title">Good morning</h2></div>
+        <div class="top-actions"><span class="live-dot"></span><span class="muted desktop-only">Clinic online</span><button class="btn btn-primary" id="quick-add">+ New appointment</button></div>
+      </header>
+      <main id="main-content" tabindex="-1"><div class="loading-state"><span class="spinner"></span>Loading clinic…</div></main>
+    </section>
+  </div>
+
+  <dialog class="modal" id="modal"><div class="modal-card"><button class="modal-close" data-close-modal aria-label="Close">×</button><div id="modal-content"></div></div></dialog>
+  <div class="toast-region" id="toast-region" aria-live="polite"></div>
+  <script src="{% static 'js/app.js' %}" defer></script>
+</body>
+</html>

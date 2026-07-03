@@ -73,3 +73,20 @@ class AppointmentSerializer(serializers.ModelSerializer):
         if value < timezone.now():
             raise serializers.ValidationError("Appointment cannot be scheduled in the past.")
         return value
+
+    def validate(self, data):
+        dentist = data.get('dentist', getattr(self.instance, 'dentist', None))
+        date_time = data.get('date_time', getattr(self.instance, 'date_time', None))
+        status = data.get('status', getattr(self.instance, 'status', 'scheduled'))
+
+        if dentist and date_time and status == 'scheduled':
+            conflicts = Appointment.objects.filter(
+                dentist=dentist, date_time=date_time, status='scheduled'
+            )
+            if self.instance:
+                conflicts = conflicts.exclude(pk=self.instance.pk)
+            if conflicts.exists():
+                raise serializers.ValidationError({
+                    'date_time': 'This dentist already has an appointment at this time.'
+                })
+        return data

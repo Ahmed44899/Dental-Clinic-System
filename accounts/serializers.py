@@ -9,9 +9,10 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ['id', 'username', 'email', 'first_name', 'last_name',
-                  'role', 'phone', 'specialization', 'license_number', 'password']
+                  'role', 'phone', 'specialization', 'license_number',
+                  'is_staff', 'password']
         # These fields can be read but never written through the API
-        read_only_fields = ['id']
+        read_only_fields = ['id', 'is_staff']
 
     def create(self, validated_data):
         # NEVER save a raw password — always use set_password() which hashes it

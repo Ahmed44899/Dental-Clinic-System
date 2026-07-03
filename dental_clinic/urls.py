@@ -19,8 +19,16 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
+from django.views.generic import TemplateView
+
+frontend_view = TemplateView.as_view(template_name='index.html')
 
 urlpatterns = [
+    path('', frontend_view, name='frontend'),
+    path('patients/', frontend_view, name='frontend-patients'),
+    path('appointments/', frontend_view, name='frontend-appointments'),
+    path('xrays/', frontend_view, name='frontend-xrays'),
+    path('team/', frontend_view, name='frontend-team'),
     path('admin/', admin.site.urls),
     path('api/accounts/', include('accounts.urls')),
     path('api/patients/', include('patients.urls')),
