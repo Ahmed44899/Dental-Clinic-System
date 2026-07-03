@@ -27,3 +27,10 @@ class XRayDetailView(generics.RetrieveDestroyAPIView):
     queryset = XRay.objects.select_related('patient', 'appointment')
     serializer_class = XRaySerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def perform_destroy(self, instance):
+        """Delete the database record and its locally stored image file."""
+        local_image = instance.image_local
+        instance.delete()
+        if local_image:
+            local_image.delete(save=False)

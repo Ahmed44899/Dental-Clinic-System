@@ -1,0 +1,5 @@
+.record-image > img {
+  object-fit: contain;
+  object-position: center;
+  background: #16201e;
+}

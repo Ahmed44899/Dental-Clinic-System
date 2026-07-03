@@ -349,7 +349,28 @@ async function saveInvoice(event) {
 async function renderXrays() {
   const payload = await request('/api/xrays/'); state.xrays = list(payload);
   $('#main-content').innerHTML = `<div class="page-head"><div><h1>X-rays</h1><p class="muted">A secure visual history of patient imaging.</p></div><button class="btn btn-primary" data-action="upload-xray">+ Upload X-ray</button></div>
-    ${state.xrays.length ? `<div class="cards-grid">${state.xrays.map(xray => `<article class="xray-card"><div class="xray-preview">${xray.image_local || xray.image_cloud ? `<img src="${escapeHtml(xray.image_local || xray.image_cloud)}" alt="Dental X-ray">` : '◇'}</div><div class="xray-body"><p class="eyebrow">${escapeHtml(xray.source)} · ${escapeHtml(xray.storage_type)}</p><h3>${escapeHtml(xray.description || 'Dental X-ray')}</h3><p class="xray-meta">Patient #${xray.patient} · ${dateTime(xray.taken_at || xray.imported_at)}</p></div></article>`).join('')}</div>` : emptyInline('No X-rays have been uploaded yet.')}`;
+    ${state.xrays.length ? `<div class="cards-grid">${state.xrays.map(xray => {
+      const image = xray.image_local || xray.image_cloud;
+      return `<article class="xray-card"><button class="xray-preview" data-action="view-xray" data-id="${xray.id}" ${image ? `data-url="${escapeHtml(image)}"` : ''} data-description="${escapeHtml(xray.description || 'Dental X-ray')}">${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(xray.description || 'Dental X-ray')}">` : '◇'}<span class="preview-hint">Open image</span></button><div class="xray-body"><p class="eyebrow">${escapeHtml(xray.source)} · ${escapeHtml(xray.storage_type)}</p><h3>${escapeHtml(xray.description || 'Dental X-ray')}</h3><p class="xray-meta">Patient #${xray.patient} · ${dateTime(xray.taken_at || xray.imported_at)}</p><button class="btn btn-danger btn-sm xray-delete" data-action="delete-xray" data-id="${xray.id}">Delete X-ray</button></div></article>`;
+    }).join('')}</div>` : emptyInline('No X-rays have been uploaded yet.')}`;
+}
+
+function viewXrayImage(action) {
+  const url = action.dataset.url;
+  if (!url) return toast('This X-ray has no image file.', 'error');
+  openModal(`<p class="eyebrow">X-RAY IMAGE</p><h2>${escapeHtml(action.dataset.description || 'Dental X-ray')}</h2><div class="full-xray"><img src="${escapeHtml(url)}" alt="${escapeHtml(action.dataset.description || 'Dental X-ray')}"></div><div class="form-actions"><button class="btn btn-secondary" data-close-modal>Close</button><a class="btn btn-primary" href="${escapeHtml(url)}" target="_blank" rel="noopener">Open original</a></div>`);
+}
+
+async function deleteXray(id) {
+  if (!window.confirm('Delete this X-ray record and its local image? This cannot be undone.')) return;
+  try {
+    await request(`/api/xrays/${id}/`, {method:'DELETE'});
+    if ($('#modal').open) closeModal();
+    toast('X-ray deleted.');
+    await renderXrays();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
 }
 
 async function xrayForm(patientId = null, appointmentId = null) {
@@ -364,7 +385,11 @@ async function xrayForm(patientId = null, appointmentId = null) {
 }
 
 async function saveXray(event) {
-  event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
+  event.preventDefault();
+  const form = event.currentTarget;
+  if (form.dataset.submitting === 'true') return;
+  const button = form.querySelector('[type="submit"]');
+  const data = new FormData(form);
   const patientId = selectedPatientId(form);
   if (!patientId) {
     form.querySelector('.form-error').textContent = 'Choose a patient from the search suggestions.';
@@ -373,8 +398,20 @@ async function saveXray(event) {
   data.delete('patient_search');
   data.set('patient', patientId);
   if (data.get('taken_at')) data.set('taken_at', new Date(data.get('taken_at')).toISOString()); else data.delete('taken_at');
-  try { await request('/api/xrays/', {method:'POST', body:data}); closeModal(); toast('X-ray uploaded securely.'); await navigate('xrays'); }
-  catch(err) { form.querySelector('.form-error').textContent = err.message; }
+  form.dataset.submitting = 'true';
+  button.disabled = true;
+  button.textContent = 'Uploading…';
+  try {
+    await request('/api/xrays/', {method:'POST', body:data});
+    closeModal();
+    toast('X-ray uploaded securely.');
+    await navigate('xrays');
+  } catch(err) {
+    form.dataset.submitting = 'false';
+    button.disabled = false;
+    button.textContent = 'Upload X-ray';
+    form.querySelector('.form-error').textContent = err.message;
+  }
 }
 
 async function renderTeam() {
@@ -406,7 +443,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const action = event.target.closest('[data-action]'); if (!action) return;
     const id = Number(action.dataset.id);
     const patientId = Number(action.dataset.patientId);
-    const actions = {retry:()=>navigate(state.view),'new-patient':()=>patientForm(),'edit-patient':()=>patientForm(state.patients.find(p=>p.id===id) || {}),'view-patient':()=>viewPatient(id),'new-appointment':appointmentForm,'appointment-detail':()=>appointmentDetail(id),invoice:()=>invoiceModal(id),'upload-xray':()=>xrayForm(),'patient-xray':()=>xrayForm(patientId),'appointment-xray':()=>xrayForm(patientId,id),'new-staff':staffForm};
+    const actions = {retry:()=>navigate(state.view),'new-patient':()=>patientForm(),'edit-patient':()=>patientForm(state.patients.find(p=>p.id===id) || {}),'view-patient':()=>viewPatient(id),'new-appointment':appointmentForm,'appointment-detail':()=>appointmentDetail(id),invoice:()=>invoiceModal(id),'upload-xray':()=>xrayForm(),'patient-xray':()=>xrayForm(patientId),'appointment-xray':()=>xrayForm(patientId,id),'view-xray':()=>viewXrayImage(action),'delete-xray':()=>deleteXray(id),'new-staff':staffForm};
     actions[action.dataset.action]?.();
   });
   boot();

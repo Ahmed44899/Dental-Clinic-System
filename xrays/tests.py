@@ -99,11 +99,15 @@ class TestXRayAPI:
 
     def test_delete_xray(self):
         xray = XRayFactory(patient=self.patient)
+        xray.image_local.save('delete-test.jpg', create_test_image(), save=True)
+        storage = xray.image_local.storage
+        image_name = xray.image_local.name
         url = reverse('xray-detail', kwargs={'pk': xray.pk})
         response = self.client.delete(url)
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
         assert not XRay.objects.filter(pk=xray.pk).exists() #make sure it is false
+        assert not storage.exists(image_name)
 
     def test_unauthenticated_user_cannot_upload(self):
         client = APIClient()  # no auth
