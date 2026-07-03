@@ -58,15 +58,24 @@ INSTALLED_APPS = [
 
 import cloudinary
 
+cloudinary_cloud_name = config('CLOUDINARY_CLOUD_NAME', default='')
+cloudinary_api_key = config('CLOUDINARY_API_KEY', default='')
+cloudinary_api_secret = config('CLOUDINARY_API_SECRET', default='')
+
 cloudinary.config(
-    cloud_name=config('CLOUDINARY_CLOUD_NAME', default=''),
-    api_key=config('CLOUDINARY_API_KEY', default=''),
-    api_secret=config('CLOUDINARY_API_SECRET', default=''),
+    cloud_name=cloudinary_cloud_name,
+    api_key=cloudinary_api_key,
+    api_secret=cloudinary_api_secret,
 )
 
-# Medical images stay local unless cloud upload is explicitly enabled.
+# On production, configured Cloudinary credentials imply persistent media
+# storage. The flag can still be set explicitly to opt out.
+cloudinary_is_configured = all((
+    cloudinary_cloud_name, cloudinary_api_key, cloudinary_api_secret,
+))
 XRAY_CLOUD_UPLOAD_ENABLED = config(
-    'XRAY_CLOUD_UPLOAD_ENABLED', default='False'
+    'XRAY_CLOUD_UPLOAD_ENABLED',
+    default='True' if cloudinary_is_configured and not DEBUG else 'False',
 ).strip().lower() in {'1', 'true', 'yes', 'on'}
 
 # Media storage — local by default, cloud when needed

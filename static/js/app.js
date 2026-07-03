@@ -69,7 +69,7 @@ function selectedPatientId(form) {
 function xrayGallery(items, emptyText = 'No X-rays are attached yet.') {
   if (!items.length) return `<div class="record-empty">◇ ${escapeHtml(emptyText)}</div>`;
   return `<div class="record-images">${items.map(xray => {
-    const image = xray.image_local || xray.image_cloud;
+    const image = xray.image_cloud || xray.image_local;
     const preview = image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(xray.description || 'Dental X-ray')}">` : '<span>◇</span>';
     return `<a class="record-image" ${image ? `href="${escapeHtml(image)}" target="_blank" rel="noopener"` : ''}>${preview}<span><strong>${escapeHtml(xray.description || 'Dental X-ray')}</strong><small>${dateTime(xray.taken_at || xray.imported_at)}</small></span></a>`;
   }).join('')}</div>`;
@@ -350,7 +350,7 @@ async function renderXrays() {
   const payload = await request('/api/xrays/'); state.xrays = list(payload);
   $('#main-content').innerHTML = `<div class="page-head"><div><h1>X-rays</h1><p class="muted">A secure visual history of patient imaging.</p></div><button class="btn btn-primary" data-action="upload-xray">+ Upload X-ray</button></div>
     ${state.xrays.length ? `<div class="cards-grid">${state.xrays.map(xray => {
-      const image = xray.image_local || xray.image_cloud;
+      const image = xray.image_cloud || xray.image_local;
       return `<article class="xray-card"><button class="xray-preview" data-action="view-xray" data-id="${xray.id}" ${image ? `data-url="${escapeHtml(image)}"` : ''} data-description="${escapeHtml(xray.description || 'Dental X-ray')}">${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(xray.description || 'Dental X-ray')}">` : '◇'}<span class="preview-hint">Open image</span></button><div class="xray-body"><p class="eyebrow">${escapeHtml(xray.source)} · ${escapeHtml(xray.storage_type)}</p><h3>${escapeHtml(xray.description || 'Dental X-ray')}</h3><p class="xray-meta">Patient #${xray.patient} · ${dateTime(xray.taken_at || xray.imported_at)}</p><button class="btn btn-danger btn-sm xray-delete" data-action="delete-xray" data-id="${xray.id}">Delete X-ray</button></div></article>`;
     }).join('')}</div>` : emptyInline('No X-rays have been uploaded yet.')}`;
 }

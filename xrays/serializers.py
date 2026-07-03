@@ -35,20 +35,23 @@ class XRaySerializer(serializers.ModelSerializer):
             validated_data['image_local'] = image_file
             validated_data['storage_type'] = 'local'
 
-            # Cloud upload is opt-in because X-rays contain sensitive medical data.
-            try:
-                if not settings.XRAY_CLOUD_UPLOAD_ENABLED:
-                    raise RuntimeError('Cloud X-ray upload is disabled')
-                upload_result = cloudinary.uploader.upload(
-                    image_file,
-                    folder=f"dental_clinic/xrays/patient_{validated_data['patient'].id}",
-                    resource_type='image'
-                )
-                validated_data['image_cloud'] = upload_result['secure_url']
-                validated_data['storage_type'] = 'both'  # saved in both places
-            except Exception:
-                # If cloud upload fails, local copy is still safe
-                pass
+            if settings.XRAY_CLOUD_UPLOAD_ENABLED:
+                try:
+                    upload_result = cloudinary.uploader.upload(
+                        image_file,
+                        folder=f"dental_clinic/xrays/patient_{validated_data['patient'].id}",
+                        resource_type='image'
+                    )
+                    validated_data['image_cloud'] = upload_result['secure_url']
+                    validated_data['storage_type'] = 'both'
+                except Exception:
+                    if not settings.DEBUG:
+                        raise serializers.ValidationError({
+                            'image_file': 'Persistent image upload failed. Please try again.'
+                        })
+                finally:
+                    # Cloudinary consumes the stream; rewind it for local saving.
+                    image_file.seek(0)
 
         validated_data['source'] = 'manual'
         return super().create(validated_data)
