@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
+from datetime import timedelta
 from pathlib import Path
 from decouple import config
 
@@ -23,6 +24,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default='True').strip().lower() in {
     '1', 'true', 'yes', 'on', 'debug', 'development',
+}
+
+# Silk is deliberately opt-in. Never expose a profiler containing SQL and
+# request data on a public deployment.
+ENABLE_SILK = config('ENABLE_SILK', default='False').strip().lower() in {
+    '1', 'true', 'yes', 'on',
 }
 
 # Local setup gets a disposable key; production still fails closed without one.
@@ -46,6 +53,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     # Third party
     'rest_framework',
+    'rest_framework_simplejwt.token_blacklist',
     'django_filters',
     # Your apps — ORDER MATTERS: accounts first
     'accounts',
@@ -55,6 +63,9 @@ INSTALLED_APPS = [
     'cloudinary',
     'cloudinary_storage',
 ]
+
+if ENABLE_SILK:
+    INSTALLED_APPS.append('silk')
 
 import cloudinary
 from urllib.parse import urlparse, unquote
@@ -89,6 +100,9 @@ XRAY_CLOUD_UPLOAD_ENABLED = config(
     'XRAY_CLOUD_UPLOAD_ENABLED',
     default='True' if cloudinary_is_configured else 'False',
 ).strip().lower() in {'1', 'true', 'yes', 'on'}
+XRAY_MAX_UPLOAD_SIZE = config('XRAY_MAX_UPLOAD_SIZE_MB', default=10, cast=int) * 1024 * 1024
+XRAY_MAX_IMAGE_PIXELS = config('XRAY_MAX_IMAGE_PIXELS', default=25_000_000, cast=int)
+XRAY_ALLOWED_CONTENT_TYPES = ('image/jpeg', 'image/png')
 
 # Media storage — local by default, cloud when needed
 STORAGES = {
@@ -116,6 +130,19 @@ REST_FRAMEWORK = {
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
     ],
+    'DEFAULT_THROTTLE_RATES': {
+        'login': '5/minute',
+        'token_refresh': '20/minute',
+    },
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
+    'REFRESH_TOKEN_LIFETIME': timedelta(hours=8),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    # Include a password-hash claim so password changes revoke old access tokens.
+    'CHECK_REVOKE_TOKEN': True,
 }
 
 
@@ -134,6 +161,19 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+if ENABLE_SILK:
+    MIDDLEWARE.append('silk.middleware.SilkyMiddleware')
+
+    # Require a Django staff session even on a local environment. Silk records
+    # request paths, timings, and SQL, so its dashboard is sensitive.
+    SILKY_AUTHENTICATION = True
+    SILKY_AUTHORISATION = True
+    SILKY_PERMISSIONS = lambda user: user.is_staff
+    LOGIN_URL = '/admin/login/'
+    SILKY_META = True
+    SILKY_MAX_RECORDED_REQUESTS = 1000
+    SILKY_MAX_RECORDED_REQUESTS_CHECK_PERCENT = 10
 
 ROOT_URLCONF = 'dental_clinic.urls'
 
@@ -161,18 +201,58 @@ WSGI_APPLICATION = 'dental_clinic.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-database_url = config('DATABASE_URL', default='sqlite:///db.sqlite3')
-if database_url.startswith('sqlite:///'):
-    sqlite_name = database_url[len('sqlite:///'):]
-    DATABASES = {
+def get_database_config():
+    """Build one database configuration from the available environment.
+
+    Hosting platforms commonly provide DATABASE_URL, while Docker Compose is
+    easier to read and maintain with separate DB_* variables. A URL takes
+    precedence when both styles are present. With neither style configured,
+    local development falls back to a project-local SQLite database.
+    """
+    database_url = config('DATABASE_URL', default='').strip()
+
+    if database_url:
+        if database_url.startswith('sqlite:///'):
+            sqlite_name = database_url[len('sqlite:///'):]
+            sqlite_path = Path(sqlite_name)
+            if not sqlite_path.is_absolute():
+                sqlite_path = BASE_DIR / sqlite_path
+            return {
+                'default': {
+                    'ENGINE': 'django.db.backends.sqlite3',
+                    'NAME': sqlite_path,
+                }
+            }
+
+        import dj_database_url
+        database = dj_database_url.parse(database_url, conn_max_age=600)
+        database['CONN_HEALTH_CHECKS'] = True
+        return {'default': database}
+
+    db_host = config('DB_HOST', default='').strip()
+    if db_host:
+        return {
+            'default': {
+                'ENGINE': 'django.db.backends.postgresql',
+                'NAME': config('DB_NAME'),
+                'USER': config('DB_USER'),
+                'PASSWORD': config('DB_PASSWORD'),
+                'HOST': db_host,
+                'PORT': config('DB_PORT', default='5432'),
+                'CONN_MAX_AGE': 600,
+                'CONN_HEALTH_CHECKS': True,
+            }
+        }
+
+    return {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / sqlite_name,
+            'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
-else:
-    import dj_database_url
-    DATABASES = {'default': dj_database_url.parse(database_url, conn_max_age=600)}
+
+
+DATABASES = get_database_config()
 
 
 # Password validation

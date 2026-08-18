@@ -2,7 +2,7 @@ import pytest
 from rest_framework.test import APIClient
 from rest_framework import status
 from django.urls import reverse
-from accounts.factories import CustomUserFactory
+from accounts.factories import CustomUserFactory, DentistFactory
 from .factories import PatientProfileFactory
 from .models import PatientProfile
 
@@ -72,3 +72,57 @@ class TestPatientAPI:
 
         assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
         assert PatientProfile.objects.filter(pk=patient.pk).exists()
+
+    def test_receptionist_can_update_patient_contact_details(self):
+        patient = PatientProfileFactory(phone='01000000000')
+
+        response = self.client.patch(
+            reverse('patient-detail', kwargs={'pk': patient.pk}),
+            {'phone': '01111111111'},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        patient.refresh_from_db()
+        assert patient.phone == '01111111111'
+
+    def test_receptionist_cannot_modify_clinical_information(self):
+        patient = PatientProfileFactory(allergies='None recorded')
+
+        response = self.client.patch(
+            reverse('patient-detail', kwargs={'pk': patient.pk}),
+            {'allergies': 'Penicillin'},
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'allergies' in response.data
+        patient.refresh_from_db()
+        assert patient.allergies == 'None recorded'
+
+    def test_dentist_can_update_contact_and_clinical_information(self):
+        dentist = DentistFactory()
+        self.client.force_authenticate(user=dentist)
+        patient = PatientProfileFactory()
+
+        response = self.client.patch(
+            reverse('patient-detail', kwargs={'pk': patient.pk}),
+            {
+                'phone': '01222222222',
+                'medical_notes': 'Controlled hypertension',
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        patient.refresh_from_db()
+        assert patient.phone == '01222222222'
+        assert patient.medical_notes == 'Controlled hypertension'
+
+    def test_dentist_cannot_create_patient_record(self):
+        dentist = DentistFactory()
+        self.client.force_authenticate(user=dentist)
+
+        response = self.client.post(
+            reverse('patient-list-create'),
+            {'full_name': 'New Patient'},
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN

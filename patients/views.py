@@ -1,6 +1,7 @@
 # patients/views.py
 
 from rest_framework import generics, permissions, filters
+from accounts.permissions import PatientAccessPermission
 from .models import PatientProfile
 from .serializers import PatientSerializer
 
@@ -12,7 +13,7 @@ class PatientListCreateView(generics.ListCreateAPIView):
     """
     queryset = PatientProfile.objects.all()
     serializer_class = PatientSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [PatientAccessPermission]
 
     # Built-in DRF search — lets you do /api/patients/?search=ahmed
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
@@ -29,7 +30,7 @@ class PatientDetailView(generics.RetrieveUpdateAPIView):
     """
     queryset = PatientProfile.objects.all()
     serializer_class = PatientSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [PatientAccessPermission]
 
 
 class PatientSearchView(generics.ListAPIView):
@@ -38,7 +39,7 @@ class PatientSearchView(generics.ListAPIView):
     Returns only the fields needed to identify a patient.
     GET /api/patients/search/?q=ahmed
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [PatientAccessPermission]
     filter_backends = [filters.SearchFilter]
     search_fields = ['full_name', 'phone']
 

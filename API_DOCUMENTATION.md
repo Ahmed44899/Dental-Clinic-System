@@ -317,39 +317,60 @@ Retrieve, update, or delete a single appointment (includes nested invoice).
 
 ### GET / PATCH `/api/appointments/<id>/invoice/` 🔒 Auth required
 
-Record or update a payment for an appointment. **No create or delete** — the invoice is always auto-created by the signal when the appointment is created, and financial records are never deleted.
+Read the calculated invoice ledger or update its currency/notes. The invoice is
+auto-created with the appointment. Dentists have read-only access; reception
+and administrators manage financial activity.
 
 **Request body**
 ```json
 {
-    "total_fees": "500.00",
-    "amount_paid": "300.00",
-    "payment_method": "cash"
+    "currency": "EGP",
+    "notes": "Insurance documents pending"
 }
 ```
 
-**Response — 200 OK** — `status` and `balance` are computed automatically:
+Totals, status, and balance are calculated from line items and immutable
+payment/refund transactions.
+
+### GET / POST `/api/appointments/<id>/invoice/items/`
+
+List or add treatment charges. Example POST:
+
 ```json
 {
-    "id": 10,
-    "total_fees": "500.00",
-    "amount_paid": "300.00",
-    "balance": "200.00",
-    "payment_method": "cash",
-    "status": "partial"
+    "description": "Composite restoration",
+    "procedure_code": "REST-COMP",
+    "quantity": "2.00",
+    "unit_price": "175.50"
 }
 ```
 
-| `amount_paid` vs `total_fees` | Resulting `status` |
-|---|---|
-| `0` | `unpaid` |
-| `0 < paid < total` | `partial` |
-| `paid == total` | `paid` |
+Line items can be corrected or removed through
+`/api/appointments/<id>/invoice/items/<item_id>/` only before the first
+payment/refund transaction.
 
-**Response — 400 Bad Request** (overpayment)
+### GET / POST `/api/appointments/<id>/invoice/transactions/`
+
+Append a payment or refund. Transactions cannot be edited or deleted.
+
 ```json
-{ "non_field_errors": ["Amount paid cannot exceed total fees."] }
+{
+    "transaction_type": "payment",
+    "amount": "200.00",
+    "payment_method": "cash",
+    "reference": "RCPT-1042",
+    "occurred_at": "2026-08-18T12:30:00Z"
+}
 ```
+
+Overpayments, excessive refunds, non-positive values, and payments against
+cancelled appointments are rejected.
+
+### GET `/api/appointments/financial-reports/`
+
+Query parameters: `date_from`, `date_to`, `currency` (`USD` or `EGP`), and
+optional `dentist`. Returns production revenue, collections, refunds, net
+collections, outstanding balances, monthly totals, and per-dentist totals.
 
 ---
 

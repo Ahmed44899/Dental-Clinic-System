@@ -17,7 +17,6 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from django.views.generic import TemplateView
 
@@ -27,6 +26,7 @@ urlpatterns = [
     path('', frontend_view, name='frontend'),
     path('patients/', frontend_view, name='frontend-patients'),
     path('appointments/', frontend_view, name='frontend-appointments'),
+    path('finances/', frontend_view, name='frontend-finances'),
     path('xrays/', frontend_view, name='frontend-xrays'),
     path('team/', frontend_view, name='frontend-team'),
     path('admin/', admin.site.urls),
@@ -36,8 +36,7 @@ urlpatterns = [
     path('api/xrays/', include('xrays.urls')),
 ]
 
-# Serve media files in development (x-ray images)
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+if settings.ENABLE_SILK:
+    urlpatterns += [path('silk/', include('silk.urls', namespace='silk'))]
 
 urlpatterns += staticfiles_urlpatterns()

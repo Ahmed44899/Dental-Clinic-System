@@ -5,7 +5,7 @@ from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from unittest.mock import patch
-from accounts.factories import CustomUserFactory
+from accounts.factories import CustomUserFactory, DentistFactory
 from patients.factories import PatientProfileFactory
 from appointments.factories import AppointmentFactory
 from .factories import XRayFactory
@@ -57,11 +57,14 @@ class TestXRayAPI:
         assert xray.patient == self.patient
         assert xray.image_local  # file was actually saved
 
-    def test_cloud_upload_is_saved_when_enabled(self):
+    def test_cloud_upload_is_saved_as_authenticated_asset_when_enabled(self):
         with override_settings(XRAY_CLOUD_UPLOAD_ENABLED=True), patch(
             'xrays.serializers.cloudinary.uploader.upload',
-            return_value={'secure_url': 'https://cloud.example/xray.jpg'},
-        ):
+            return_value={
+                'secure_url': 'https://cloud.example/xray.jpg',
+                'public_id': 'dental_clinic/xrays/patient_1/opaque-id',
+            },
+        ) as upload:
             response = self.client.post(reverse('xray-list-create'), {
                 'patient': self.patient.id,
                 'image_file': create_test_image(),
@@ -70,7 +73,93 @@ class TestXRayAPI:
         assert response.status_code == status.HTTP_201_CREATED
         xray = XRay.objects.get(pk=response.data['id'])
         assert xray.image_cloud == 'https://cloud.example/xray.jpg'
+        assert xray.cloud_public_id == 'dental_clinic/xrays/patient_1/opaque-id'
         assert xray.storage_type == 'both'
+        assert upload.call_args.kwargs['type'] == 'authenticated'
+
+    def test_upload_requires_an_image(self):
+        response = self.client.post(reverse('xray-list-create'), {
+            'patient': self.patient.id,
+            'description': 'Metadata without an image',
+        })
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'image_file' in response.data
+
+    def test_upload_rejects_file_over_configured_size(self):
+        with override_settings(XRAY_MAX_UPLOAD_SIZE=100):
+            response = self.client.post(reverse('xray-list-create'), {
+                'patient': self.patient.id,
+                'image_file': create_test_image(),
+            }, format='multipart')
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'smaller' in str(response.data['image_file'][0])
+
+    def test_upload_rejects_non_image_disguised_as_jpeg(self):
+        fake_image = SimpleUploadedFile(
+            'scan.jpg', b'<script>alert(1)</script>', content_type='image/jpeg'
+        )
+
+        response = self.client.post(reverse('xray-list-create'), {
+            'patient': self.patient.id,
+            'image_file': fake_image,
+        }, format='multipart')
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'image_file' in response.data
+
+    def test_saved_filename_does_not_expose_original_filename(self):
+        image = create_test_image()
+        image.name = 'patient-full-name-secret.jpg'
+
+        response = self.client.post(reverse('xray-list-create'), {
+            'patient': self.patient.id,
+            'image_file': image,
+        }, format='multipart')
+
+        assert response.status_code == status.HTTP_201_CREATED
+        stored_name = XRay.objects.get(pk=response.data['id']).image_local.name
+        assert 'patient-full-name-secret' not in stored_name
+        assert stored_name.endswith('.jpg')
+
+    def test_serializer_exposes_protected_endpoint_not_media_path(self):
+        response = self.client.post(reverse('xray-list-create'), {
+            'patient': self.patient.id,
+            'image_file': create_test_image(),
+        }, format='multipart')
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data['image_local'].endswith(
+            reverse('xray-image', kwargs={'pk': response.data['id']})
+        )
+        assert '/media/' not in response.data['image_local']
+
+    def test_local_image_download_requires_authentication(self):
+        xray = XRayFactory(patient=self.patient)
+        xray.image_local.save('protected.jpg', create_test_image(), save=True)
+        url = reverse('xray-image', kwargs={'pk': xray.pk})
+
+        authorized = self.client.get(url)
+        anonymous = APIClient().get(url)
+
+        assert authorized.status_code == status.HTTP_200_OK
+        assert authorized.streaming
+        assert authorized['Cache-Control'] == 'private, no-store'
+        assert anonymous.status_code == status.HTTP_401_UNAUTHORIZED
+        authorized.close()
+
+    def test_dentist_cannot_download_unassigned_patients_image(self):
+        dentist = DentistFactory()
+        self.client.force_authenticate(user=dentist)
+        xray = XRayFactory(patient=self.patient)
+        xray.image_local.save('concealed.jpg', create_test_image(), save=True)
+
+        response = self.client.get(
+            reverse('xray-image', kwargs={'pk': xray.pk})
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_list_xrays_filtered_by_patient(self):
         other_patient = PatientProfileFactory()
@@ -120,7 +209,7 @@ class TestXRayAPI:
 
         assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
 
-    def test_delete_xray(self):
+    def test_receptionist_cannot_delete_xray(self):
         xray = XRayFactory(patient=self.patient)
         xray.image_local.save('delete-test.jpg', create_test_image(), save=True)
         storage = xray.image_local.storage
@@ -128,9 +217,129 @@ class TestXRayAPI:
         url = reverse('xray-detail', kwargs={'pk': xray.pk})
         response = self.client.delete(url)
 
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert XRay.objects.filter(pk=xray.pk).exists()
+        assert storage.exists(image_name)
+
+    def test_dentist_can_delete_xray_for_assigned_patient(self):
+        dentist = DentistFactory()
+        AppointmentFactory(patient=self.patient, dentist=dentist)
+        self.client.force_authenticate(user=dentist)
+        xray = XRayFactory(patient=self.patient)
+        xray.image_local.save('dentist-delete-test.jpg', create_test_image(), save=True)
+        storage = xray.image_local.storage
+        image_name = xray.image_local.name
+
+        response = self.client.delete(
+            reverse('xray-detail', kwargs={'pk': xray.pk})
+        )
+
         assert response.status_code == status.HTTP_204_NO_CONTENT
-        assert not XRay.objects.filter(pk=xray.pk).exists() #make sure it is false
+        assert not XRay.objects.filter(pk=xray.pk).exists()
         assert not storage.exists(image_name)
+
+    def test_delete_removes_authenticated_cloud_asset(self):
+        dentist = DentistFactory()
+        AppointmentFactory(patient=self.patient, dentist=dentist)
+        self.client.force_authenticate(user=dentist)
+        xray = XRayFactory(
+            patient=self.patient,
+            image_cloud='https://cloud.example/xray.jpg',
+            cloud_public_id='dental_clinic/xrays/patient_1/opaque-id',
+            storage_type='cloud',
+        )
+
+        with patch('xrays.views.cloudinary.uploader.destroy') as destroy:
+            response = self.client.delete(
+                reverse('xray-detail', kwargs={'pk': xray.pk})
+            )
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        destroy.assert_called_once_with(
+            xray.cloud_public_id,
+            resource_type='image',
+            type='authenticated',
+            invalidate=True,
+        )
+        assert not XRay.objects.filter(pk=xray.pk).exists()
+
+    def test_storage_failure_keeps_record_for_safe_retry(self):
+        dentist = DentistFactory()
+        AppointmentFactory(patient=self.patient, dentist=dentist)
+        self.client.force_authenticate(user=dentist)
+        xray = XRayFactory(patient=self.patient)
+        xray.image_local.save('retry-delete.jpg', create_test_image(), save=True)
+
+        with patch.object(
+            xray.image_local.storage, 'delete', side_effect=OSError('offline')
+        ):
+            response = self.client.delete(
+                reverse('xray-detail', kwargs={'pk': xray.pk})
+            )
+
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert XRay.objects.filter(pk=xray.pk).exists()
+
+    def test_dentist_cannot_delete_unassigned_patients_xray(self):
+        dentist = DentistFactory()
+        self.client.force_authenticate(user=dentist)
+        xray = XRayFactory(patient=self.patient)
+
+        response = self.client.delete(
+            reverse('xray-detail', kwargs={'pk': xray.pk})
+        )
+
+        # Queryset filtering intentionally conceals whether the record exists.
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert XRay.objects.filter(pk=xray.pk).exists()
+
+    def test_dentist_lists_only_assigned_patients_xrays(self):
+        dentist = DentistFactory()
+        assigned_patient = PatientProfileFactory()
+        other_patient = PatientProfileFactory()
+        AppointmentFactory(patient=assigned_patient, dentist=dentist)
+        own_xray = XRayFactory(patient=assigned_patient)
+        XRayFactory(patient=other_patient)
+        self.client.force_authenticate(user=dentist)
+
+        response = self.client.get(reverse('xray-list-create'))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert [record['id'] for record in response.data] == [own_xray.id]
+
+    def test_dentist_can_upload_only_for_assigned_patient(self):
+        dentist = DentistFactory()
+        assigned_patient = PatientProfileFactory()
+        other_patient = PatientProfileFactory()
+        AppointmentFactory(patient=assigned_patient, dentist=dentist)
+        self.client.force_authenticate(user=dentist)
+
+        allowed = self.client.post(reverse('xray-list-create'), {
+            'patient': assigned_patient.id,
+            'image_file': create_test_image(),
+        }, format='multipart')
+        forbidden = self.client.post(reverse('xray-list-create'), {
+            'patient': other_patient.id,
+            'image_file': create_test_image(),
+        }, format='multipart')
+
+        assert allowed.status_code == status.HTTP_201_CREATED
+        assert forbidden.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_dentist_cannot_attach_xray_to_another_dentists_appointment(self):
+        dentist = DentistFactory()
+        shared_patient = PatientProfileFactory()
+        AppointmentFactory(patient=shared_patient, dentist=dentist)
+        other_dentists_appointment = AppointmentFactory(patient=shared_patient)
+        self.client.force_authenticate(user=dentist)
+
+        response = self.client.post(reverse('xray-list-create'), {
+            'patient': shared_patient.id,
+            'appointment': other_dentists_appointment.id,
+            'image_file': create_test_image(),
+        }, format='multipart')
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_unauthenticated_user_cannot_upload(self):
         client = APIClient()  # no auth

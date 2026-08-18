@@ -1,5 +1,7 @@
 from django.db import models
 from patients.models import PatientProfile
+from pathlib import Path
+from uuid import uuid4
 
 
 def xray_upload_path(instance, filename):
@@ -9,7 +11,10 @@ def xray_upload_path(instance, filename):
     media/xrays/patient_3/scan.jpg
     This is a real-world pattern used in production systems.
     """
-    return f'xrays/patient_{instance.patient.id}/{filename}'
+    suffix = Path(filename).suffix.lower()
+    if suffix not in {'.jpg', '.jpeg', '.png'}:
+        suffix = '.img'
+    return f'xrays/patient_{instance.patient_id}/{uuid4().hex}{suffix}'
 
 
 class XRay(models.Model):
@@ -33,6 +38,7 @@ class XRay(models.Model):
     )
     image_local = models.ImageField(upload_to=xray_upload_path, blank=True)
     image_cloud = models.URLField(blank=True)
+    cloud_public_id = models.CharField(max_length=255, blank=True)
     storage_type = models.CharField(max_length=10, choices=STORAGE_CHOICES, default='local')
     source = models.CharField(max_length=10, choices=SOURCE_CHOICES, default='manual')
     external_id = models.CharField(max_length=100, blank=True)  # ID from xray machine
@@ -46,4 +52,3 @@ class XRay(models.Model):
 
     def __str__(self):
         return f'XRay of {self.patient} — {self.taken_at}'
-    
