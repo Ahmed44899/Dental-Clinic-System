@@ -42,7 +42,7 @@ class Appointment(models.Model):
         ordering = ['-date_time']  # most recent first
         constraints = [
             models.CheckConstraint(
-                check=models.Q(duration_minutes__gte=5, duration_minutes__lte=480),
+                condition=models.Q(duration_minutes__gte=5, duration_minutes__lte=480),
                 name='appointment_duration_between_5_and_480',
             ),
             models.UniqueConstraint(
@@ -137,11 +137,11 @@ class InvoiceLineItem(models.Model):
         ordering = ['created_at', 'id']
         constraints = [
             models.CheckConstraint(
-                check=models.Q(quantity__gt=0),
+                condition=models.Q(quantity__gt=0),
                 name='invoice_item_quantity_positive',
             ),
             models.CheckConstraint(
-                check=models.Q(unit_price__gte=0),
+                condition=models.Q(unit_price__gte=0),
                 name='invoice_item_price_nonnegative',
             ),
         ]
@@ -187,7 +187,7 @@ class PaymentTransaction(models.Model):
         ordering = ['occurred_at', 'id']
         constraints = [
             models.CheckConstraint(
-                check=models.Q(amount__gt=0),
+                condition=models.Q(amount__gt=0),
                 name='payment_transaction_amount_positive',
             ),
         ]

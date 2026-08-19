@@ -80,15 +80,15 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='invoicelineitem',
-            constraint=models.CheckConstraint(check=models.Q(('quantity__gt', 0)), name='invoice_item_quantity_positive'),
+            constraint=models.CheckConstraint(condition=models.Q(('quantity__gt', 0)), name='invoice_item_quantity_positive'),
         ),
         migrations.AddConstraint(
             model_name='invoicelineitem',
-            constraint=models.CheckConstraint(check=models.Q(('unit_price__gte', 0)), name='invoice_item_price_nonnegative'),
+            constraint=models.CheckConstraint(condition=models.Q(('unit_price__gte', 0)), name='invoice_item_price_nonnegative'),
         ),
         migrations.AddConstraint(
             model_name='paymenttransaction',
-            constraint=models.CheckConstraint(check=models.Q(('amount__gt', 0)), name='payment_transaction_amount_positive'),
+            constraint=models.CheckConstraint(condition=models.Q(('amount__gt', 0)), name='payment_transaction_amount_positive'),
         ),
         migrations.RunPython(migrate_legacy_invoice_values, migrations.RunPython.noop),
         migrations.RemoveField(model_name='invoice', name='amount_paid'),

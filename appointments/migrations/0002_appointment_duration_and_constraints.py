@@ -47,7 +47,7 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name='appointment',
             constraint=models.CheckConstraint(
-                check=models.Q(
+                condition=models.Q(
                     duration_minutes__gte=5,
                     duration_minutes__lte=480,
                 ),
