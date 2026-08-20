@@ -16,3 +16,5 @@ htmlcov/
 .env*
 !.env.example
 staticfiles/
+# AWS deployment metadata is not needed inside the runtime image.
+aws/
