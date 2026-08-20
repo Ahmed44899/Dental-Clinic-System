@@ -16,8 +16,21 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Now copy the rest of the project
+# Create an unprivileged account for the Django process.
+RUN addgroup --system app && adduser --system --ingroup app app
+
+# Copy application files.
 COPY . .
+
+# Prepare directories that may need application-level access.
+RUN mkdir -p /app/staticfiles /app/media \
+    && chown -R app:app /app/staticfiles /app/media
+
+# Everything below runs without root privileges.
+USER app
+
+# Bake static assets into the immutable production image.
+RUN python manage.py collectstatic --noinput
 
 EXPOSE 8000
 

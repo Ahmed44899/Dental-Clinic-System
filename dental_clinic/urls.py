@@ -19,10 +19,12 @@ from django.urls import path, include
 from django.conf import settings
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from django.views.generic import TemplateView
+from .views import health_check
 
 frontend_view = TemplateView.as_view(template_name='index.html')
 
 urlpatterns = [
+    path("health/", health_check, name="health-check"),
     path('', frontend_view, name='frontend'),
     path('patients/', frontend_view, name='frontend-patients'),
     path('appointments/', frontend_view, name='frontend-appointments'),
@@ -39,4 +41,5 @@ urlpatterns = [
 if settings.ENABLE_SILK:
     urlpatterns += [path('silk/', include('silk.urls', namespace='silk'))]
 
-urlpatterns += staticfiles_urlpatterns()
+if settings.DEBUG:
+    urlpatterns += staticfiles_urlpatterns()
