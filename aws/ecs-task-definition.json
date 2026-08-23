@@ -1,0 +1,144 @@
+{
+  "family": "dental-clinic-web",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::449952322520:role/dental-clinic-ecs-execution-role",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "volumes": [
+    {
+      "name": "temporary-files"
+    }
+  ],
+  "containerDefinitions": [
+    {
+      "name": "web",
+      "image": "449952322520.dkr.ecr.us-east-1.amazonaws.com/dental-clinic-web:3ecd97cb2fd8",
+      "essential": true,
+      "readonlyRootFilesystem": true,
+      "linuxParameters": {
+        "initProcessEnabled": true
+      },
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "hostPort": 8000,
+          "protocol": "tcp",
+          "appProtocol": "http"
+        }
+      ],
+      "mountPoints": [
+        {
+          "sourceVolume": "temporary-files",
+          "containerPath": "/tmp",
+          "readOnly": false
+        }
+      ],
+      "environment": [
+        {
+          "name": "DJANGO_SETTINGS_MODULE",
+          "value": "dental_clinic.settings_production"
+        },
+        {
+          "name": "ALLOWED_HOSTS",
+          "value": "dental-clinic-alb-308782330.us-east-1.elb.amazonaws.com,localhost,127.0.0.1"
+        },
+        {
+          "name": "CSRF_TRUSTED_ORIGINS",
+          "value": "http://dental-clinic-alb-308782330.us-east-1.elb.amazonaws.com"
+        },
+        {
+          "name": "DJANGO_HTTPS_ENABLED",
+          "value": "False"
+        },
+        {
+          "name": "DB_HOST",
+          "value": "dental-clinic-db.c21q68ogm0bk.us-east-1.rds.amazonaws.com"
+        },
+        {
+          "name": "DB_PORT",
+          "value": "5432"
+        },
+        {
+          "name": "DB_NAME",
+          "value": "dental_clinic"
+        },
+        {
+          "name": "DB_SSLMODE",
+          "value": "require"
+        },
+        {
+          "name": "XRAY_CLOUD_UPLOAD_ENABLED",
+          "value": "True"
+        },
+        {
+          "name": "PORT",
+          "value": "8000"
+        },
+        {
+          "name": "GUNICORN_WORKERS",
+          "value": "1"
+        },
+        {
+          "name": "GUNICORN_THREADS",
+          "value": "2"
+        },
+        {
+          "name": "GUNICORN_TIMEOUT",
+          "value": "60"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "SECRET_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:449952322520:secret:dental-clinic/production/app-lg02vD:SECRET_KEY::"
+        },
+        {
+          "name": "CLOUDINARY_CLOUD_NAME",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:449952322520:secret:dental-clinic/production/app-lg02vD:CLOUDINARY_CLOUD_NAME::"
+        },
+        {
+          "name": "CLOUDINARY_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:449952322520:secret:dental-clinic/production/app-lg02vD:CLOUDINARY_API_KEY::"
+        },
+        {
+          "name": "CLOUDINARY_API_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:449952322520:secret:dental-clinic/production/app-lg02vD:CLOUDINARY_API_SECRET::"
+        },
+        {
+          "name": "DB_USER",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:449952322520:secret:rds!db-b920b32d-c654-483d-8547-efd20f527e67-76GLrS:username::"
+        },
+        {
+          "name": "DB_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:449952322520:secret:rds!db-b920b32d-c654-483d-8547-efd20f527e67-76GLrS:password::"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/dental-clinic-web",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "web"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/', timeout=5)\" || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 30
+      },
+      "stopTimeout": 30
+    }
+  ]
+}

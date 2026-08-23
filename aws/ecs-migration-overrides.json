@@ -1,0 +1,13 @@
+{
+  "containerOverrides": [
+    {
+      "name": "web",
+      "command": [
+        "python",
+        "manage.py",
+        "migrate",
+        "--noinput"
+      ]
+    }
+  ]
+}
