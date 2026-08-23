@@ -85,31 +85,46 @@ class XRaySerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         image_file = validated_data.pop('image_file')
-        validated_data['image_local'] = image_file
-        validated_data['storage_type'] = 'local'
         cloud_public_id = ''
 
         if settings.XRAY_CLOUD_UPLOAD_ENABLED:
             try:
                 upload_result = cloudinary.uploader.upload(
                     image_file,
-                    folder=f"dental_clinic/xrays/patient_{validated_data['patient'].id}",
+                    folder=(
+                        'dental_clinic/xrays/'
+                        f"patient_{validated_data['patient'].id}"
+                    ),
                     resource_type='image',
                     type='authenticated',
                 )
-                cloud_public_id = upload_result['public_id']
-                validated_data['cloud_public_id'] = cloud_public_id
-                validated_data['image_cloud'] = upload_result.get('secure_url', '')
-                validated_data['storage_type'] = 'both'
             except Exception:
                 if not settings.DEBUG:
                     raise serializers.ValidationError({
-                        'image_file': 'Persistent image upload failed. Please try again.'
+                        'image_file': (
+                            'Persistent image upload failed. Please try again.'
+                        )
                     })
+
+                # Local development may fall back to filesystem storage.
+                validated_data['image_local'] = image_file
+                validated_data['storage_type'] = 'local'
+            else:
+                cloud_public_id = upload_result['public_id']
+                validated_data['cloud_public_id'] = cloud_public_id
+                validated_data['image_cloud'] = upload_result.get(
+                    'secure_url',
+                    '',
+                )
+                validated_data['storage_type'] = 'cloud'
             finally:
                 image_file.seek(0)
+        else:
+            validated_data['image_local'] = image_file
+            validated_data['storage_type'] = 'local'
 
         validated_data['source'] = 'manual'
+
         try:
             return super().create(validated_data)
         except Exception:

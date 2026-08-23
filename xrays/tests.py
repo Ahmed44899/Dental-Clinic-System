@@ -74,8 +74,55 @@ class TestXRayAPI:
         xray = XRay.objects.get(pk=response.data['id'])
         assert xray.image_cloud == 'https://cloud.example/xray.jpg'
         assert xray.cloud_public_id == 'dental_clinic/xrays/patient_1/opaque-id'
-        assert xray.storage_type == 'both'
+        assert xray.storage_type == 'cloud'
+        assert not xray.image_local
         assert upload.call_args.kwargs['type'] == 'authenticated'
+
+    def test_production_cloud_failure_does_not_save_ephemeral_copy(self):
+        with override_settings(
+            XRAY_CLOUD_UPLOAD_ENABLED=True,
+            DEBUG=False,
+        ), patch(
+            'xrays.serializers.cloudinary.uploader.upload',
+            side_effect=RuntimeError('Cloud storage unavailable'),
+        ):
+            response = self.client.post(
+                reverse('xray-list-create'),
+                {
+                    'patient': self.patient.id,
+                    'image_file': create_test_image(),
+                },
+                format='multipart',
+            )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'image_file' in response.data
+        assert XRay.objects.count() == 0
+
+    def test_development_cloud_failure_falls_back_to_local_storage(self):
+        with override_settings(
+            XRAY_CLOUD_UPLOAD_ENABLED=True,
+            DEBUG=True,
+        ), patch(
+            'xrays.serializers.cloudinary.uploader.upload',
+            side_effect=RuntimeError('Cloud storage unavailable'),
+        ):
+            response = self.client.post(
+                reverse('xray-list-create'),
+                {
+                    'patient': self.patient.id,
+                    'image_file': create_test_image(),
+                },
+                format='multipart',
+            )
+
+        assert response.status_code == status.HTTP_201_CREATED
+
+        xray = XRay.objects.get(pk=response.data['id'])
+
+        assert xray.storage_type == 'local'
+        assert xray.image_local
+        assert not xray.cloud_public_id
 
     def test_upload_requires_an_image(self):
         response = self.client.post(reverse('xray-list-create'), {
