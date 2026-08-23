@@ -14,7 +14,7 @@
   "containerDefinitions": [
     {
       "name": "web",
-      "image": "449952322520.dkr.ecr.us-east-1.amazonaws.com/dental-clinic-web:3ecd97cb2fd8",
+      "image": "449952322520.dkr.ecr.us-east-1.amazonaws.com/dental-clinic-web:8ce911b0ec9c",
       "essential": true,
       "readonlyRootFilesystem": false,
       "linuxParameters": {
