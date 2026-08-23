@@ -11,17 +11,12 @@
     "cpuArchitecture": "X86_64",
     "operatingSystemFamily": "LINUX"
   },
-  "volumes": [
-    {
-      "name": "temporary-files"
-    }
-  ],
   "containerDefinitions": [
     {
       "name": "web",
       "image": "449952322520.dkr.ecr.us-east-1.amazonaws.com/dental-clinic-web:3ecd97cb2fd8",
       "essential": true,
-      "readonlyRootFilesystem": true,
+      "readonlyRootFilesystem": false,
       "linuxParameters": {
         "initProcessEnabled": true
       },
@@ -31,13 +26,6 @@
           "hostPort": 8000,
           "protocol": "tcp",
           "appProtocol": "http"
-        }
-      ],
-      "mountPoints": [
-        {
-          "sourceVolume": "temporary-files",
-          "containerPath": "/tmp",
-          "readOnly": false
         }
       ],
       "environment": [
