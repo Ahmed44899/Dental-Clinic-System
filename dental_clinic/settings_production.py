@@ -72,6 +72,10 @@ SECURE_SSL_REDIRECT = HTTPS_ENABLED
 SESSION_COOKIE_SECURE = HTTPS_ENABLED
 CSRF_COOKIE_SECURE = HTTPS_ENABLED
 
+# The ALB checks targets over the VPC's internal HTTP connection. Keep only the
+# health endpoint exempt while redirecting every user-facing route to HTTPS.
+SECURE_REDIRECT_EXEMPT = [r"^health/$"]
+
 SECURE_HSTS_SECONDS = (
     config("SECURE_HSTS_SECONDS", default=3600, cast=int)
     if HTTPS_ENABLED

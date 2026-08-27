@@ -34,3 +34,18 @@ def test_other_routes_reject_unapproved_hosts():
         )
 
     assert response.status_code == 400
+
+
+@override_settings(
+    ALLOWED_HOSTS=["clinic.example.com"],
+    SECURE_SSL_REDIRECT=True,
+    SECURE_REDIRECT_EXEMPT=[r"^health/$"],
+)
+def test_health_check_is_not_redirected_when_https_is_enabled():
+    response = Client().get(
+        reverse("health-check"),
+        HTTP_HOST="172.31.1.112:8000",
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
