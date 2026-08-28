@@ -14,7 +14,7 @@
   "containerDefinitions": [
     {
       "name": "web",
-      "image": "449952322520.dkr.ecr.us-east-1.amazonaws.com/dental-clinic-web:8ce911b0ec9c",
+      "image": "449952322520.dkr.ecr.us-east-1.amazonaws.com/dental-clinic-web:a24ee57ca604",
       "essential": true,
       "readonlyRootFilesystem": false,
       "linuxParameters": {
@@ -35,15 +35,15 @@
         },
         {
           "name": "ALLOWED_HOSTS",
-          "value": "dental-clinic-alb-308782330.us-east-1.elb.amazonaws.com,localhost,127.0.0.1"
+          "value": "app.dentomanager.com,localhost,127.0.0.1"
         },
         {
           "name": "CSRF_TRUSTED_ORIGINS",
-          "value": "http://dental-clinic-alb-308782330.us-east-1.elb.amazonaws.com"
+          "value": "https://app.dentomanager.com"
         },
         {
           "name": "DJANGO_HTTPS_ENABLED",
-          "value": "False"
+          "value": "True"
         },
         {
           "name": "DB_HOST",
