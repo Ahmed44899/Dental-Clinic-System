@@ -1,0 +1,12 @@
+{
+  "taskRoleArn": "arn:aws:iam::449952322520:role/dental-clinic-ecs-task-role",
+  "containerOverrides": [
+    {
+      "name": "web",
+      "command": [
+        "sleep",
+        "3600"
+      ]
+    }
+  ]
+}
