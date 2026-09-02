@@ -7,6 +7,7 @@
   "cpu": "256",
   "memory": "512",
   "executionRoleArn": "arn:aws:iam::449952322520:role/dental-clinic-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::449952322520:role/dental-clinic-app-task-role",
   "runtimePlatform": {
     "cpuArchitecture": "X86_64",
     "operatingSystemFamily": "LINUX"
@@ -58,6 +59,10 @@
           "value": "dental_clinic"
         },
         {
+          "name": "DB_SECRET_ARN",
+          "value": "arn:aws:secretsmanager:us-east-1:449952322520:secret:rds!db-b920b32d-c654-483d-8547-efd20f527e67-76GLrS"
+        },
+        {
           "name": "DB_SSLMODE",
           "value": "require"
         },
@@ -98,14 +103,6 @@
         {
           "name": "CLOUDINARY_API_SECRET",
           "valueFrom": "arn:aws:secretsmanager:us-east-1:449952322520:secret:dental-clinic/production/app-lg02vD:CLOUDINARY_API_SECRET::"
-        },
-        {
-          "name": "DB_USER",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:449952322520:secret:rds!db-b920b32d-c654-483d-8547-efd20f527e67-76GLrS:username::"
-        },
-        {
-          "name": "DB_PASSWORD",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:449952322520:secret:rds!db-b920b32d-c654-483d-8547-efd20f527e67-76GLrS:password::"
         }
       ],
       "logConfiguration": {

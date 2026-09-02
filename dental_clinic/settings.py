@@ -232,16 +232,26 @@ def get_database_config():
 
     db_host = config('DB_HOST', default='').strip()
     if db_host:
+        db_secret_arn = config('DB_SECRET_ARN', default='').strip()
         return {
             'default': {
-                'ENGINE': 'django.db.backends.postgresql',
+                'ENGINE': (
+                    'dental_clinic.db_backends.secrets_manager_postgresql'
+                    if db_secret_arn
+                    else 'django.db.backends.postgresql'
+                ),
                 'NAME': config('DB_NAME'),
-                'USER': config('DB_USER'),
-                'PASSWORD': config('DB_PASSWORD'),
+                'USER': config('DB_USER', default=''),
+                'PASSWORD': config('DB_PASSWORD', default=''),
                 'HOST': db_host,
                 'PORT': config('DB_PORT', default='5432'),
                 'CONN_MAX_AGE': 600,
                 'CONN_HEALTH_CHECKS': True,
+                'OPTIONS': (
+                    {'rds_secret_arn': db_secret_arn}
+                    if db_secret_arn
+                    else {}
+                ),
             }
         }
 

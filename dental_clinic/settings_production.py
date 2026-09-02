@@ -50,8 +50,14 @@ if not ALLOWED_HOSTS:
 CSRF_TRUSTED_ORIGINS = csv_setting("CSRF_TRUSTED_ORIGINS")
 
 
-# Production must use PostgreSQL, never the SQLite fallback.
-if DATABASES["default"]["ENGINE"] != "django.db.backends.postgresql":
+# Production must use PostgreSQL, never the SQLite fallback. The custom backend
+# retrieves the current RDS-managed password whenever it opens a connection.
+postgresql_engines = {
+    "django.db.backends.postgresql",
+    "dental_clinic.db_backends.secrets_manager_postgresql",
+}
+
+if DATABASES["default"]["ENGINE"] not in postgresql_engines:
     raise ImproperlyConfigured(
         "Production must use PostgreSQL through DATABASE_URL or DB_* settings."
     )
@@ -99,3 +105,23 @@ if not cloudinary_is_configured:
     )
 
 XRAY_CLOUD_UPLOAD_ENABLED = True
+
+
+# Send unexpected request failures to the ECS CloudWatch log stream. Values
+# from request bodies and environment variables are deliberately not logged.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "loggers": {
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+    },
+}

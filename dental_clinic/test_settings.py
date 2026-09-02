@@ -11,6 +11,7 @@ DATABASE_ENVIRONMENT_KEYS = (
     'DB_USER',
     'DB_PASSWORD',
     'DB_PORT',
+    'DB_SECRET_ARN',
 )
 
 
@@ -57,7 +58,26 @@ def test_separate_database_variables_configure_postgresql(monkeypatch):
         'PORT': '5433',
         'CONN_MAX_AGE': 600,
         'CONN_HEALTH_CHECKS': True,
+        'OPTIONS': {},
     }
+
+
+def test_rds_secret_selects_runtime_credentials_backend(monkeypatch):
+    clear_database_environment(monkeypatch)
+    monkeypatch.setenv('DB_HOST', 'private-rds.example')
+    monkeypatch.setenv('DB_NAME', 'dental_clinic')
+    monkeypatch.setenv('DB_SECRET_ARN', 'arn:aws:secretsmanager:example')
+
+    database = get_database_config()['default']
+
+    assert database['ENGINE'] == (
+        'dental_clinic.db_backends.secrets_manager_postgresql'
+    )
+    assert database['USER'] == ''
+    assert database['PASSWORD'] == ''
+    assert database['OPTIONS']['rds_secret_arn'] == (
+        'arn:aws:secretsmanager:example'
+    )
 
 
 def test_missing_database_configuration_falls_back_to_sqlite(monkeypatch):
