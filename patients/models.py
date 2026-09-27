@@ -2,6 +2,11 @@ from django.db import models
 
 
 class PatientProfile(models.Model):
+    clinic = models.ForeignKey(
+        'clinics.Clinic', on_delete=models.PROTECT,
+        related_name='patients',
+    )
+
     BLOOD_TYPE_CHOICES = [
         ('A+', 'A+'), ('A-', 'A-'),
         ('B+', 'B+'), ('B-', 'B-'),
@@ -35,4 +40,3 @@ class PatientProfile(models.Model):
 
     class Meta:
         ordering = ['full_name']  # default ordering for all queries
-        

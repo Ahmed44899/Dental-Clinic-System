@@ -9,6 +9,7 @@ class XRayFactory(factory.django.DjangoModelFactory):
         model = XRay
 
     patient = factory.SubFactory(PatientProfileFactory)
+    clinic = factory.SelfAttribute('patient.clinic')
     storage_type = 'local'
     source = 'manual'
     external_id = factory.Sequence(lambda n: f'XR{n:04d}')

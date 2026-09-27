@@ -1,3 +1,7 @@
+from clinics.api import clinic_for
+from clinics.models import ClinicMembership
+from clinics.querysets import membership_cache_attr
+
 from django.contrib.auth import password_validation
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
@@ -7,7 +11,29 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .models import CustomUser
 
 
-class UserSerializer(serializers.ModelSerializer):
+class ClinicUserRepresentationMixin:
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        membership = None
+        if request:
+            clinic = clinic_for(request)
+            cached = getattr(instance, membership_cache_attr(clinic.pk), None)
+            if cached is not None:
+                membership = next((m for m in cached if m.clinic_id == clinic.pk), None)
+            else:
+                # Single-object/write responses may not use a prefetched queryset.
+                membership = instance.clinic_memberships.filter(clinic=clinic).first()
+        data['role'] = membership.role if membership else None
+        if 'is_active' in data:
+            data['is_active'] = bool(instance.is_active and membership and membership.is_active)
+        # Django admin privileges are never a clinic role.
+        if 'is_staff' in data:
+            data['is_staff'] = False
+        return data
+
+
+class UserSerializer(ClinicUserRepresentationMixin, serializers.ModelSerializer):
     # write_only=True means password appears in requests but NEVER in responses
     password = serializers.CharField(write_only=True, min_length=8)
 
@@ -40,7 +66,7 @@ class UserSerializer(serializers.ModelSerializer):
         return CustomUser.objects.create_user(password=password, **validated_data)
 
 
-class StaffDirectorySerializer(serializers.ModelSerializer):
+class StaffDirectorySerializer(ClinicUserRepresentationMixin, serializers.ModelSerializer):
     """Small, non-sensitive staff representation for authenticated coworkers."""
 
     class Meta:
@@ -99,16 +125,11 @@ class PasswordChangeSerializer(serializers.Serializer):
         return user
 
 
-class StaffStatusSerializer(serializers.ModelSerializer):
+class MembershipStatusSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(source='user_id', read_only=True)
+    username = serializers.CharField(source='user.username', read_only=True)
+
     class Meta:
-        model = CustomUser
+        model = ClinicMembership
         fields = ['id', 'username', 'role', 'is_active']
         read_only_fields = ['id', 'username', 'role']
-
-    def validate_is_active(self, value):
-        request_user = self.context['request'].user
-        if self.instance == request_user and not value:
-            raise serializers.ValidationError('You cannot deactivate your own account.')
-        if self.instance.is_superuser and not request_user.is_superuser:
-            raise serializers.ValidationError('Only a superuser may change a superuser account.')
-        return value

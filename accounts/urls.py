@@ -1,6 +1,7 @@
 from django.urls import path
 from .views import (
     CurrentUserView,
+    MembershipListView,
     DentistListView,
     LoginView,
     LogoutView,
@@ -12,6 +13,7 @@ from .views import (
 )
 
 urlpatterns = [
+    path('memberships/', MembershipListView.as_view(), name='membership-list'),
     path('register/', RegisterUserView.as_view(), name='register'),
     path('staff/', StaffListView.as_view(), name='staff-list'),
     path('staff/<int:pk>/status/', StaffStatusView.as_view(), name='staff-status'),

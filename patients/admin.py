@@ -1,9 +1,11 @@
+from clinics.admin_support import ReadOnlyClinicalAdminMixin
+
 from django.contrib import admin
 from .models import PatientProfile
 
 
 @admin.register(PatientProfile)
-class PatientProfileAdmin(admin.ModelAdmin):
+class PatientProfileAdmin(ReadOnlyClinicalAdminMixin, admin.ModelAdmin):
     list_display = ['full_name', 'phone', 'email', 'blood_type', 'created_at']
     list_filter = ['blood_type']
     search_fields = ['full_name', 'phone', 'email']

@@ -5,6 +5,11 @@ from patients.models import PatientProfile
 
 
 class Appointment(models.Model):
+    clinic = models.ForeignKey(
+        'clinics.Clinic', on_delete=models.PROTECT,
+        related_name='appointments',
+    )
+
     DEFAULT_DURATION_MINUTES = 30
     MIN_DURATION_MINUTES = 5
     MAX_DURATION_MINUTES = 480
@@ -59,6 +64,11 @@ class Appointment(models.Model):
 
 
 class Invoice(models.Model):
+    clinic = models.ForeignKey(
+        'clinics.Clinic', on_delete=models.PROTECT,
+        related_name='invoices',
+    )
+
     CURRENCY_CHOICES = [
         ('USD', 'US Dollar'),
         ('EGP', 'Egyptian Pound'),
@@ -118,6 +128,11 @@ class Invoice(models.Model):
 
 
 class InvoiceLineItem(models.Model):
+    clinic = models.ForeignKey(
+        'clinics.Clinic', on_delete=models.PROTECT,
+        related_name='invoice_line_items',
+    )
+
     invoice = models.ForeignKey(
         Invoice, on_delete=models.PROTECT, related_name='line_items'
     )
@@ -152,6 +167,11 @@ class InvoiceLineItem(models.Model):
 
 
 class PaymentTransaction(models.Model):
+    clinic = models.ForeignKey(
+        'clinics.Clinic', on_delete=models.PROTECT,
+        related_name='payment_transactions',
+    )
+
     TYPE_PAYMENT = 'payment'
     TYPE_REFUND = 'refund'
     TYPE_CHOICES = [

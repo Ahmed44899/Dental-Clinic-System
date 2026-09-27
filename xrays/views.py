@@ -1,3 +1,5 @@
+from clinics.api import clinic_for
+
 import mimetypes
 from pathlib import Path
 from urllib.parse import urlparse
@@ -5,8 +7,10 @@ from urllib.parse import urlparse
 import cloudinary.uploader
 from cloudinary.utils import cloudinary_url
 from django.http import FileResponse, HttpResponseRedirect
+from django.db import transaction
+from appointments.models import Appointment
 from rest_framework import generics
-from rest_framework.exceptions import APIException, NotFound, PermissionDenied
+from rest_framework.exceptions import APIException, NotFound, PermissionDenied, ValidationError
 from accounts.permissions import (
     XRayAccessPermission,
     dentist_has_patient,
@@ -22,11 +26,12 @@ class XRayStorageError(APIException):
     default_detail = 'The X-ray storage service is unavailable. Please try again.'
 
 
-def xray_queryset_for(user):
-    queryset = XRay.objects.select_related('patient', 'appointment')
-    if is_dentist(user) and not is_clinic_admin(user):
+def xray_queryset_for(request):
+    user = request.user
+    queryset = XRay.objects.filter(clinic=clinic_for(request), patient__clinic=clinic_for(request)).select_related('patient', 'appointment')
+    if is_dentist(request) and not is_clinic_admin(request):
         queryset = queryset.filter(
-            patient__appointments__dentist=user
+            patient__appointments__dentist=user, patient__appointments__clinic=clinic_for(request)
         ).distinct()
     return queryset
 
@@ -40,7 +45,7 @@ class XRayListCreateView(generics.ListCreateAPIView):
         Filter by patient — /api/xrays/?patient=3
         A patient's full xray history in one call.
         """
-        queryset = xray_queryset_for(self.request.user)
+        queryset = xray_queryset_for(self.request)
         patient_id = self.request.query_params.get('patient')
         appointment_id = self.request.query_params.get('appointment')
         if patient_id:
@@ -50,13 +55,26 @@ class XRayListCreateView(generics.ListCreateAPIView):
         return queryset
 
     def perform_create(self, serializer):
+        with transaction.atomic():
+            appointment = serializer.validated_data.get('appointment')
+            if appointment:
+                appointment = Appointment.objects.select_for_update().get(pk=appointment.pk)
+                if (
+                    appointment.clinic_id != clinic_for(self.request).pk
+                    or appointment.patient_id != serializer.validated_data['patient'].pk
+                ):
+                    raise ValidationError({'appointment': 'This appointment belongs to a different patient or clinic.'})
+                serializer.validated_data['appointment'] = appointment
+            self._save_xray(serializer)
+
+    def _save_xray(self, serializer):
         patient = serializer.validated_data['patient']
         appointment = serializer.validated_data.get('appointment')
         if (
-            is_dentist(self.request.user)
-            and not is_clinic_admin(self.request.user)
+            is_dentist(self.request)
+            and not is_clinic_admin(self.request)
         ):
-            if not dentist_has_patient(self.request.user, patient.pk):
+            if not dentist_has_patient(self.request, patient.pk):
                 raise PermissionDenied(
                     'Dentists may upload X-rays only for their assigned patients.'
                 )
@@ -64,7 +82,7 @@ class XRayListCreateView(generics.ListCreateAPIView):
                 raise PermissionDenied(
                     'Dentists may attach X-rays only to their own appointments.'
                 )
-        serializer.save()
+        serializer.save(clinic=clinic_for(self.request))
 
 
 class XRayDetailView(generics.RetrieveDestroyAPIView):
@@ -74,7 +92,7 @@ class XRayDetailView(generics.RetrieveDestroyAPIView):
     permission_classes = [XRayAccessPermission]
 
     def get_queryset(self):
-        return xray_queryset_for(self.request.user)
+        return xray_queryset_for(self.request)
 
     def perform_destroy(self, instance):
         """Remove owned storage objects before removing their database pointer."""
@@ -99,7 +117,7 @@ class XRayImageView(generics.GenericAPIView):
     permission_classes = [XRayAccessPermission]
 
     def get_queryset(self):
-        return xray_queryset_for(self.request.user)
+        return xray_queryset_for(self.request)
 
     def get(self, request, *args, **kwargs):
         xray = self.get_object()

@@ -1,41 +1,38 @@
 from rest_framework.permissions import BasePermission, SAFE_METHODS
+from clinics.api import membership_for, clinic_for, HasClinicMembership
 
 
-def is_clinic_admin(user):
-    """Return True for either Django administrators or clinic-role admins."""
-    return bool(
-        user
-        and user.is_authenticated
-        and (user.is_staff or user.is_superuser or user.role == 'admin')
-    )
+def is_clinic_admin(request):
+    return membership_for(request).role == 'admin'
 
 
-def is_receptionist(user):
-    return bool(user and user.is_authenticated and user.role == 'receptionist')
+def is_receptionist(request):
+    return membership_for(request).role == 'receptionist'
 
 
-def is_dentist(user):
-    return bool(user and user.is_authenticated and user.role == 'dentist')
+def is_dentist(request):
+    return membership_for(request).role == 'dentist'
 
 
-def dentist_has_patient(user, patient_id):
+def dentist_has_patient(request, patient_id):
     """Define dentist/patient ownership through an assigned appointment."""
-    if not is_dentist(user) or not patient_id:
+    if not is_dentist(request) or not patient_id:
         return False
 
     # Imported lazily to avoid an accounts -> appointments import cycle.
     from appointments.models import Appointment
     return Appointment.objects.filter(
-        dentist_id=user.pk,
+        dentist_id=request.user.pk,
+        clinic=clinic_for(request),
         patient_id=patient_id,
     ).exists()
 
 
 class IsClinicAdmin(BasePermission):
-    """Allow Django staff/superusers and users assigned the clinic admin role."""
+    """Allow administrators of the selected clinic."""
 
     def has_permission(self, request, view):
-        return is_clinic_admin(request.user)
+        return HasClinicMembership().has_permission(request, view) and is_clinic_admin(request)
 
 
 class PatientAccessPermission(BasePermission):
@@ -48,17 +45,19 @@ class PatientAccessPermission(BasePermission):
         if not user or not user.is_authenticated:
             return False
         if request.method == 'POST':
-            return is_clinic_admin(user) or is_receptionist(user)
-        return is_clinic_admin(user) or is_receptionist(user) or is_dentist(user)
+            return is_clinic_admin(request) or is_receptionist(request)
+        return is_clinic_admin(request) or is_receptionist(request) or is_dentist(request)
 
     def has_object_permission(self, request, view, obj):
+        if obj.clinic_id != clinic_for(request).pk:
+            return False
         # Patient deletion is not exposed by the views. All three clinic roles
         # may read/update existing records; serializers protect specific fields.
         return self.has_permission(request, view)
 
 
 class AppointmentAccessPermission(BasePermission):
-    """Reception/admin schedule globally; dentists access assigned visits."""
+    """Reception/admin schedule within a clinic; dentists access assigned visits."""
 
     message = 'Dentists may only access appointments assigned to them.'
 
@@ -67,14 +66,16 @@ class AppointmentAccessPermission(BasePermission):
         if not user or not user.is_authenticated:
             return False
         if request.method == 'POST':
-            return is_clinic_admin(user) or is_receptionist(user)
-        return is_clinic_admin(user) or is_receptionist(user) or is_dentist(user)
+            return is_clinic_admin(request) or is_receptionist(request)
+        return is_clinic_admin(request) or is_receptionist(request) or is_dentist(request)
 
     def has_object_permission(self, request, view, obj):
+        if obj.clinic_id != clinic_for(request).pk:
+            return False
         user = request.user
-        if is_clinic_admin(user) or is_receptionist(user):
+        if is_clinic_admin(request) or is_receptionist(request):
             return True
-        return is_dentist(user) and obj.dentist_id == user.pk
+        return is_dentist(request) and obj.dentist_id == user.pk
 
 
 class InvoiceAccessPermission(BasePermission):
@@ -87,19 +88,21 @@ class InvoiceAccessPermission(BasePermission):
         if not user or not user.is_authenticated:
             return False
         if request.method not in SAFE_METHODS:
-            return is_clinic_admin(user) or is_receptionist(user)
-        return is_clinic_admin(user) or is_receptionist(user) or is_dentist(user)
+            return is_clinic_admin(request) or is_receptionist(request)
+        return is_clinic_admin(request) or is_receptionist(request) or is_dentist(request)
 
     def has_object_permission(self, request, view, obj):
+        if obj.clinic_id != clinic_for(request).pk:
+            return False
         user = request.user
-        if is_clinic_admin(user) or is_receptionist(user):
+        if is_clinic_admin(request) or is_receptionist(request):
             return True
         appointment = getattr(obj, 'appointment', None)
         if appointment is None and getattr(obj, 'invoice', None):
             appointment = obj.invoice.appointment
         return (
             request.method in SAFE_METHODS
-            and is_dentist(user)
+            and is_dentist(request)
             and appointment is not None
             and appointment.dentist_id == user.pk
         )
@@ -115,15 +118,17 @@ class XRayAccessPermission(BasePermission):
         return bool(
             user
             and user.is_authenticated
-            and (is_clinic_admin(user) or is_receptionist(user) or is_dentist(user))
+            and (is_clinic_admin(request) or is_receptionist(request) or is_dentist(request))
         )
 
     def has_object_permission(self, request, view, obj):
+        if obj.clinic_id != clinic_for(request).pk:
+            return False
         user = request.user
-        if is_clinic_admin(user):
+        if is_clinic_admin(request):
             return True
-        if is_receptionist(user):
+        if is_receptionist(request):
             return request.method in SAFE_METHODS
-        if is_dentist(user):
-            return dentist_has_patient(user, obj.patient_id)
+        if is_dentist(request):
+            return dentist_has_patient(request, obj.patient_id)
         return False

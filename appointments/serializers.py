@@ -1,3 +1,6 @@
+from clinics.api import clinic_for
+from patients.models import PatientProfile
+
 # appointments/serializers.py
 
 from datetime import timedelta
@@ -18,7 +21,13 @@ class DentistField(serializers.PrimaryKeyRelatedField):
     to be selected. Receptionists and admins are excluded automatically.
     """
     def get_queryset(self):
-        return CustomUser.objects.filter(role='dentist', is_active=True)
+        request = self.context.get('request')
+        if request is None:
+            return CustomUser.objects.none()
+        return CustomUser.objects.filter(
+            is_active=True, clinic_memberships__clinic=clinic_for(request),
+            clinic_memberships__role='dentist', clinic_memberships__is_active=True,
+        )
 
 class InvoiceLineItemSerializer(serializers.ModelSerializer):
     total = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
@@ -127,6 +136,14 @@ class AppointmentSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'created_by']
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get('request')
+        self.fields['patient'].queryset = (
+            PatientProfile.objects.filter(clinic=clinic_for(request))
+            if request else PatientProfile.objects.none()
+        )
+
     def validate_date_time(self, value):
         """Prevent scheduling appointments in the past."""
         if value < timezone.now():
@@ -163,7 +180,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         submitted_fields = set(self.initial_data.keys())
 
-        if request and is_receptionist(request.user):
+        if request and is_receptionist(request):
             protected_fields = {'diagnosis', 'procedures_done'}
             attempted_fields = protected_fields.intersection(submitted_fields)
             if attempted_fields:
@@ -172,7 +189,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
                     for field in sorted(attempted_fields)
                 })
 
-        if request and is_dentist(request.user) and self.instance:
+        if request and is_dentist(request) and self.instance:
             scheduling_fields = {
                 'patient', 'dentist', 'date_time', 'duration_minutes',
                 'is_emergency_overbook', 'emergency_reason',

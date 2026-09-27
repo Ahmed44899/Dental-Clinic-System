@@ -1,8 +1,13 @@
+from clinics.api import clinic_for
+from clinics.querysets import membership_prefetch
+from .filters import AppointmentFilter
+
 from rest_framework import generics, permissions
 from rest_framework import filters
 from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404
 from django.db import transaction
+from django.db.models import Prefetch
 from rest_framework.exceptions import ValidationError
 from accounts.models import CustomUser
 from accounts.permissions import (
@@ -21,15 +26,35 @@ from .serializers import (
 )
 
 
-def invoice_queryset_for(user):
-    queryset = Invoice.objects.select_related(
+def ledger_prefetches(request, prefix=''):
+    """Batch both ledger actors and their selected-clinic membership metadata."""
+    clinic = clinic_for(request)
+    return (
+        Prefetch(
+            prefix + 'line_items',
+            queryset=InvoiceLineItem.objects.select_related('created_by').prefetch_related(
+                membership_prefetch(clinic, 'created_by__clinic_memberships'),
+            ),
+        ),
+        Prefetch(
+            prefix + 'transactions',
+            queryset=PaymentTransaction.objects.select_related('recorded_by').prefetch_related(
+                membership_prefetch(clinic, 'recorded_by__clinic_memberships'),
+            ),
+        ),
+    )
+
+
+def invoice_queryset_for(request):
+    user = request.user
+    queryset = Invoice.objects.filter(clinic=clinic_for(request), appointment__clinic=clinic_for(request)).select_related(
         'appointment__dentist', 'appointment__patient'
     ).prefetch_related(
-        'line_items__created_by', 'transactions__recorded_by'
+        *ledger_prefetches(request)
     )
-    if is_dentist(user) and not is_clinic_admin(user):
+    if is_dentist(request) and not is_clinic_admin(request):
         return queryset.filter(appointment__dentist=user)
-    if is_clinic_admin(user) or is_receptionist(user):
+    if is_clinic_admin(request) or is_receptionist(request):
         return queryset
     return queryset.none()
 
@@ -38,9 +63,7 @@ class AppointmentListCreateView(generics.ListCreateAPIView):
     serializer_class = AppointmentSerializer
     permission_classes = [AppointmentAccessPermission]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = [
-        'status', 'dentist', 'patient', 'is_emergency_overbook',
-    ]
+    filterset_class = AppointmentFilter
     search_fields = ['patient__full_name', 'dentist__first_name', 'chief_complaint']
     ordering_fields = ['date_time', 'created_at']
 
@@ -50,16 +73,17 @@ class AppointmentListCreateView(generics.ListCreateAPIView):
         Without it, accessing appointment.patient triggers a new DB query
         for every single appointment in the list — this is called the N+1 problem.
         """
-        queryset = Appointment.objects.select_related(
+        queryset = Appointment.objects.filter(clinic=clinic_for(self.request), patient__clinic=clinic_for(self.request)).select_related(
             'patient', 'dentist', 'invoice'
         ).prefetch_related(
-            'invoice__line_items', 'invoice__transactions'
+            membership_prefetch(clinic_for(self.request), 'dentist__clinic_memberships'),
+            *ledger_prefetches(self.request, 'invoice__'),
         ).all()
-        if is_dentist(self.request.user) and not is_clinic_admin(self.request.user):
+        if is_dentist(self.request) and not is_clinic_admin(self.request):
             queryset = queryset.filter(dentist=self.request.user)
         elif not (
-            is_clinic_admin(self.request.user)
-            or is_receptionist(self.request.user)
+            is_clinic_admin(self.request)
+            or is_receptionist(self.request)
         ):
             queryset = queryset.none()
         return queryset
@@ -82,7 +106,7 @@ class AppointmentListCreateView(generics.ListCreateAPIView):
                 raise ValidationError({
                     'date_time': 'This appointment overlaps another scheduled visit for this dentist.'
                 })
-            serializer.save(created_by=self.request.user, dentist=dentist)
+            serializer.save(created_by=self.request.user, dentist=dentist, clinic=clinic_for(self.request))
 
 
 class AppointmentDetailView(generics.RetrieveUpdateAPIView):
@@ -90,12 +114,15 @@ class AppointmentDetailView(generics.RetrieveUpdateAPIView):
     permission_classes = [AppointmentAccessPermission]
 
     def get_queryset(self):
-        queryset = Appointment.objects.select_related(
+        queryset = Appointment.objects.filter(clinic=clinic_for(self.request), patient__clinic=clinic_for(self.request)).select_related(
             'patient', 'dentist', 'invoice'
-        ).prefetch_related('invoice__line_items', 'invoice__transactions')
-        if is_dentist(self.request.user) and not is_clinic_admin(self.request.user):
+        ).prefetch_related(
+            membership_prefetch(clinic_for(self.request), 'dentist__clinic_memberships'),
+            *ledger_prefetches(self.request, 'invoice__'),
+        )
+        if is_dentist(self.request) and not is_clinic_admin(self.request):
             return queryset.filter(dentist=self.request.user)
-        if is_clinic_admin(self.request.user) or is_receptionist(self.request.user):
+        if is_clinic_admin(self.request) or is_receptionist(self.request):
             return queryset
         return queryset.none()
 
@@ -113,6 +140,16 @@ class AppointmentDetailView(generics.RetrieveUpdateAPIView):
         )
         with transaction.atomic():
             dentist = CustomUser.objects.select_for_update().get(pk=dentist.pk)
+            # Share this lock with X-ray attachment: neither operation may leave
+            # the image pointing at a different patient's appointment.
+            serializer.instance = Appointment.objects.select_for_update().get(
+                pk=serializer.instance.pk,
+            )
+            patient = serializer.validated_data.get('patient', serializer.instance.patient)
+            if serializer.instance.xrays.exclude(patient_id=patient.pk).exists():
+                raise ValidationError({
+                    'patient': 'The patient cannot change while this appointment has X-rays for another patient.'
+                })
             if (
                 appointment_status == 'scheduled'
                 and not is_emergency
@@ -137,7 +174,7 @@ class InvoiceDetailView(generics.RetrieveUpdateAPIView):
     permission_classes = [InvoiceAccessPermission]
 
     def get_queryset(self):
-        return invoice_queryset_for(self.request.user)
+        return invoice_queryset_for(self.request)
 
     def get_object(self):
         invoice = get_object_or_404(
@@ -153,7 +190,7 @@ class InvoiceLineItemListCreateView(generics.ListCreateAPIView):
     permission_classes = [InvoiceAccessPermission]
 
     def get_invoice(self, lock=False):
-        queryset = invoice_queryset_for(self.request.user)
+        queryset = invoice_queryset_for(self.request)
         if lock:
             queryset = queryset.select_for_update()
         invoice = get_object_or_404(
@@ -164,13 +201,16 @@ class InvoiceLineItemListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         return InvoiceLineItem.objects.filter(
+            clinic=clinic_for(self.request),
             invoice=self.get_invoice()
-        ).select_related('created_by')
+        ).select_related('created_by').prefetch_related(
+            membership_prefetch(clinic_for(self.request), 'created_by__clinic_memberships'),
+        )
 
     def perform_create(self, serializer):
         with transaction.atomic():
             invoice = self.get_invoice(lock=True)
-            serializer.save(invoice=invoice, created_by=self.request.user)
+            serializer.save(invoice=invoice, created_by=self.request.user, clinic=invoice.clinic)
 
 
 class InvoiceLineItemDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -180,9 +220,12 @@ class InvoiceLineItemDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return InvoiceLineItem.objects.filter(
-            invoice__in=invoice_queryset_for(self.request.user),
+            clinic=clinic_for(self.request),
+            invoice__in=invoice_queryset_for(self.request),
             invoice__appointment_id=self.kwargs['pk'],
-        ).select_related('invoice__appointment', 'created_by')
+        ).select_related('invoice__appointment', 'created_by').prefetch_related(
+            membership_prefetch(clinic_for(self.request), 'created_by__clinic_memberships'),
+        )
 
     def _lock_invoice_without_transactions(self, item):
         invoice = Invoice.objects.select_for_update().get(pk=item.invoice_id)
@@ -208,7 +251,7 @@ class PaymentTransactionListCreateView(generics.ListCreateAPIView):
     permission_classes = [InvoiceAccessPermission]
 
     def get_invoice(self, lock=False):
-        queryset = invoice_queryset_for(self.request.user)
+        queryset = invoice_queryset_for(self.request)
         if lock:
             queryset = queryset.select_for_update()
         invoice = get_object_or_404(
@@ -219,8 +262,11 @@ class PaymentTransactionListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         return PaymentTransaction.objects.filter(
+            clinic=clinic_for(self.request),
             invoice=self.get_invoice()
-        ).select_related('recorded_by')
+        ).select_related('recorded_by').prefetch_related(
+            membership_prefetch(clinic_for(self.request), 'recorded_by__clinic_memberships'),
+        )
 
     def perform_create(self, serializer):
         with transaction.atomic():
@@ -246,4 +292,4 @@ class PaymentTransactionListCreateView(generics.ListCreateAPIView):
                     'amount': 'Refund cannot exceed the net amount collected.'
                 })
 
-            serializer.save(invoice=invoice, recorded_by=self.request.user)
+            serializer.save(invoice=invoice, recorded_by=self.request.user, clinic=invoice.clinic)

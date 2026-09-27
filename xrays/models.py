@@ -18,6 +18,11 @@ def xray_upload_path(instance, filename):
 
 
 class XRay(models.Model):
+    clinic = models.ForeignKey(
+        'clinics.Clinic', on_delete=models.PROTECT,
+        related_name='xrays',
+    )
+
     STORAGE_CHOICES = [
         ('local', 'Local'),
         ('cloud', 'Cloud'),

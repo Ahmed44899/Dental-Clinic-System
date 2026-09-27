@@ -45,7 +45,7 @@ ALLOWED_HOSTS = [
 ]
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
+    'clinics.apps.PlatformAdminConfig',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'django_filters',
     # Your apps — ORDER MATTERS: accounts first
     'accounts',
+    'clinics.apps.ClinicsConfig',
     'patients',
     'appointments.apps.AppointmentsConfig',
     'xrays',

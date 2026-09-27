@@ -26,13 +26,14 @@ function viewFromPath() {
 }
 
 const auth = {
+  get clinic() { return sessionStorage.getItem('clinic'); },
   get access() { return sessionStorage.getItem('access'); },
   get refresh() { return sessionStorage.getItem('refresh'); },
   save(tokens) {
     if (tokens.access) sessionStorage.setItem('access', tokens.access);
     if (tokens.refresh) sessionStorage.setItem('refresh', tokens.refresh);
   },
-  clear() { sessionStorage.removeItem('access'); sessionStorage.removeItem('refresh'); },
+  clear() { sessionStorage.removeItem('clinic'); sessionStorage.removeItem('access'); sessionStorage.removeItem('refresh'); },
 };
 
 function escapeHtml(value = '') {
@@ -45,7 +46,7 @@ function initials(name = '') {
 
 function list(payload) { return Array.isArray(payload) ? payload : (payload?.results || []); }
 function fullName(person) { return [person?.first_name, person?.last_name].filter(Boolean).join(' ') || person?.username || 'Staff member'; }
-function isAdminUser() { return Boolean(state.user && (state.user.role === 'admin' || state.user.is_staff)); }
+function isAdminUser() { return Boolean(state.user && (state.user.role === 'admin')); }
 function isReceptionistUser() { return state.user?.role === 'receptionist' && !isAdminUser(); }
 function isDentistUser() { return state.user?.role === 'dentist' && !isAdminUser(); }
 function canManageSchedule() { return isAdminUser() || isReceptionistUser(); }
@@ -102,6 +103,7 @@ function apiError(data) {
 async function request(path, options = {}, retry = true) {
   const headers = new Headers(options.headers || {});
   if (auth.access) headers.set('Authorization', `Bearer ${auth.access}`);
+  if (auth.clinic) headers.set('X-Clinic-ID', auth.clinic);
   if (options.body && !(options.body instanceof FormData)) headers.set('Content-Type', 'application/json');
   const response = await fetch(path, {...options, headers});
   if (response.status === 401 && retry && auth.refresh && path !== '/api/accounts/token/refresh/') {
@@ -121,7 +123,7 @@ async function request(path, options = {}, retry = true) {
 async function protectedImageUrl(path, retry = true) {
   if (state.xrayObjectUrls.has(path)) return state.xrayObjectUrls.get(path);
   const response = await fetch(path, {
-    headers: {'Authorization': `Bearer ${auth.access}`},
+    headers: {'Authorization': `Bearer ${auth.access}`, 'X-Clinic-ID': auth.clinic || ''},
   });
   if (response.status === 401 && retry && auth.refresh) {
     const refreshResponse = await fetch('/api/accounts/token/refresh/', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({refresh:auth.refresh})});
@@ -180,6 +182,9 @@ function logout() {
   const refresh = auth.refresh;
   clearProtectedImages();
   auth.clear(); state.user = null;
+  state.patients = []; state.appointments = []; state.dentists = []; state.staff = []; state.xrays = [];
+  $('#main-content').replaceChildren();
+  closeModal();
   $('#app-shell').classList.add('hidden');
   $('#login-screen').classList.remove('hidden');
   $('#login-form').reset();
@@ -195,6 +200,18 @@ function logout() {
 async function boot() {
   if (!auth.access) return logout();
   try {
+    const memberships = await request('/api/accounts/memberships/');
+    if (!memberships.length) throw new Error('No active clinic membership. Contact your administrator.');
+    const active = memberships.find(m => String(m.clinic_id) === auth.clinic) || memberships[0];
+    sessionStorage.setItem('clinic', active.clinic_id);
+    const picker = $('#clinic-picker');
+    picker.innerHTML = memberships.map(m => `<option value="${m.clinic_id}">${escapeHtml(m.clinic_name)}</option>`).join('');
+    picker.value = String(active.clinic_id);
+    picker.onchange = () => {
+      sessionStorage.setItem('clinic', picker.value);
+      // A full reload discards cached records, image blobs and in-flight UI work.
+      window.location.reload();
+    };
     state.user = await request('/api/accounts/me/');
     const name = fullName(state.user);
     $('#user-name').textContent = name;
@@ -204,7 +221,7 @@ async function boot() {
     $('#login-screen').classList.add('hidden');
     $('#app-shell').classList.remove('hidden');
     await navigate(viewFromPath(), false);
-  } catch { logout(); }
+  } catch (error) { logout(); $('#login-error').textContent = error.message; }
 }
 
 async function ensureReferenceData() {

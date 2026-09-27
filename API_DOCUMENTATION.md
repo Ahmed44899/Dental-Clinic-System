@@ -426,24 +426,30 @@ X-ray records support retrieve and delete only — **no update**, by design. An 
 
 ## Automated X-Ray Import
 
-A custom Django management command imports X-rays in bulk from an external JSON source (e.g. an X-ray machine's export, or a legacy system), matching them to existing patients by name.
+A trusted operator can import X-ray references from a JSON array into one explicitly selected active clinic. This command does not download images or verify ownership of external URLs; use only trusted, appropriately protected sources.
 
 ```bash
-python manage.py import_xrays --source xray_data.json
+python manage.py import_xrays --clinic 1 --source xray_data.json --dry-run
+python manage.py import_xrays --clinic 1 --source xray_data.json
 ```
 
+Replace `1` with the intended clinic ID and verify your database environment first.
+
 **Options**
+
 | Flag | Description |
 |------|-------------|
+| `--clinic` | Required ID of an active clinic |
 | `--source` | Path to the JSON file (default: `xray_data.json`) |
-| `--dry-run` | Preview the import without saving anything |
+| `--dry-run` | Validate and preview counts without saving records |
 
 **Expected JSON format**
+
 ```json
 [
     {
         "xray_id": "XR001",
-        "patient_name": "Ahmed Ali",
+        "patient_name": "Synthetic Patient",
         "image_url": "https://example.com/xray1.jpg",
         "taken_at": "2024-01-15T10:30:00Z",
         "description": "Upper molar periapical"
@@ -452,17 +458,21 @@ python manage.py import_xrays --source xray_data.json
 ```
 
 **Behavior**
-- Matches patients by case-insensitive partial name match (`full_name__icontains`)
-- Skips a record if that `external_id` already exists for the matched patient
-- Reports unmatched patients as errors without stopping the rest of the import
-- `--dry-run` previews exactly what would happen with zero database writes
+
+- Provide a `patient_id`, or an exact, case-insensitive `patient_name` (`full_name__iexact`). IDs take precedence; there is no fallback to name matching for an invalid ID.
+- All patient lookup and duplicate checks stay within the selected clinic. Zero or multiple name matches count as an error.
+- `xray_id` is required. Records already imported for that patient, or repeated successfully within the batch, are skipped.
+- Non-object entries, invalid IDs, invalid timestamps/fields, and record-level database constraint failures count as errors. Later valid records continue. Each row uses its own transaction/savepoint.
+- Invalid JSON or a non-array document stops the command before importing. Database outages and unexpected programming errors are not swallowed.
+- `--dry-run` performs the same field validation and detects within-batch duplicates, but cannot predict concurrent changes or all database-time failures.
+- Error output identifies the row number without exposing patient names or image URLs.
+- Summary counts may indicate partial success; inspect `Errors` before treating a batch as complete. The command does not provide concurrency-safe duplicate prevention between separate import processes.
 
 **Sample output**
-```
-  Imported xray for Ahmed Ali
-Patient not found: NonexistentPatient
 
-Done — Imported: 1 | Skipped: 0 | Errors: 1
+```text
+Record 2: invalid record; skipped.
+Imported: 1 | Skipped: 0 | Errors: 1
 ```
 
 ---

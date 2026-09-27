@@ -11,6 +11,7 @@ class AppointmentFactory(factory.django.DjangoModelFactory):
         model = Appointment
 
     patient = factory.SubFactory(PatientProfileFactory) #subfactory for giving a factory to a variable
+    clinic = factory.SelfAttribute('patient.clinic')
     dentist = factory.SubFactory(DentistFactory)
     created_by = factory.SubFactory(CustomUserFactory)
     date_time = factory.LazyFunction(lambda: timezone.now() + timedelta(days=1))

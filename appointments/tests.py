@@ -420,7 +420,7 @@ class TestFinancialReports:
         invoice.currency = currency
         invoice.save(update_fields=['currency'])
         InvoiceLineItem.objects.create(
-            invoice=invoice,
+            invoice=invoice, clinic=invoice.clinic,
             description='Treatment',
             quantity=Decimal('1.00'),
             unit_price=Decimal(revenue),
@@ -428,7 +428,7 @@ class TestFinancialReports:
         )
         if Decimal(payment) > 0:
             PaymentTransaction.objects.create(
-                invoice=invoice,
+                invoice=invoice, clinic=invoice.clinic,
                 transaction_type='payment',
                 amount=Decimal(payment),
                 payment_method='cash',
@@ -437,7 +437,7 @@ class TestFinancialReports:
             )
         if Decimal(refund) > 0:
             PaymentTransaction.objects.create(
-                invoice=invoice,
+                invoice=invoice, clinic=invoice.clinic,
                 transaction_type='refund',
                 amount=Decimal(refund),
                 payment_method='cash',

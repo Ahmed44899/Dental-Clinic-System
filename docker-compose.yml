@@ -30,6 +30,7 @@ services:
       # Compose is a local stack. Blank any hosted DATABASE_URL from .env so
       # commands can never migrate or modify the online database accidentally.
       DATABASE_URL: ""
+      DB_SECRET_ARN: ""
       DB_HOST: db
       DB_PORT: 5432
       DEBUG: "True"

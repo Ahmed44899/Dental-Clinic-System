@@ -427,7 +427,7 @@ class TestImportXraysCommand:
         file_path = self._write_temp_json(data)
 
         out = StringIO()
-        call_command('import_xrays', f'--source={file_path}', stdout=out)
+        call_command('import_xrays', f'--source={file_path}', clinic=self.patient.clinic_id, stdout=out)
 
         assert XRay.objects.filter(patient=self.patient, external_id='XR100').exists()
         assert 'Imported: 1' in out.getvalue()
@@ -443,7 +443,7 @@ class TestImportXraysCommand:
         file_path = self._write_temp_json(data)
 
         out = StringIO()
-        call_command('import_xrays', f'--source={file_path}', stdout=out)
+        call_command('import_xrays', f'--source={file_path}', clinic=self.patient.clinic_id, stdout=out)
 
         # Should still only be 1 record — not duplicated
         assert XRay.objects.filter(patient=self.patient, external_id='XR100').count() == 1
@@ -458,7 +458,7 @@ class TestImportXraysCommand:
         file_path = self._write_temp_json(data)
 
         out = StringIO()
-        call_command('import_xrays', f'--source={file_path}', stdout=out)
+        call_command('import_xrays', f'--source={file_path}', clinic=self.patient.clinic_id, stdout=out)
 
         assert not XRay.objects.filter(external_id='XR999').exists()
         assert 'Errors: 1' in out.getvalue()
@@ -472,13 +472,13 @@ class TestImportXraysCommand:
         file_path = self._write_temp_json(data)
 
         out = StringIO()
-        call_command('import_xrays', f'--source={file_path}', '--dry-run', stdout=out)
+        call_command('import_xrays', f'--source={file_path}', '--dry-run', clinic=self.patient.clinic_id, stdout=out)
 
         assert not XRay.objects.filter(external_id='XR200').exists()
         assert 'DRY RUN' in out.getvalue()
 
     def test_missing_file_reports_error(self):
         out = StringIO()
-        call_command('import_xrays', '--source=does_not_exist.json', stdout=out)
+        call_command('import_xrays', '--source=does_not_exist.json', clinic=self.patient.clinic_id, stdout=out)
 
         assert 'not found' in out.getvalue().lower()

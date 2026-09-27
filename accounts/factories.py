@@ -15,6 +15,16 @@ class CustomUserFactory(factory.django.DjangoModelFactory):
     role = 'receptionist'
 
     @factory.post_generation
+    def clinic(self, create, extracted, **kwargs):
+        if create:
+            from clinics.factories import default_clinic
+            from clinics.models import ClinicMembership
+            ClinicMembership.objects.create(
+                user=self, clinic=extracted or default_clinic(),
+                role=self.role, is_active=self.is_active,
+            )
+
+    @factory.post_generation
     def password(self, create, extracted, **kwargs):
         """Always hash the password properly, even in test data."""
         password = extracted or 'testpass123'

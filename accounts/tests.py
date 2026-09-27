@@ -255,7 +255,8 @@ class TestStaffAccountLifecycle:
 
         assert response.status_code == status.HTTP_200_OK
         self.target.refresh_from_db()
-        assert self.target.is_active is False
+        assert self.target.is_active is True
+        assert self.target.clinic_memberships.get().is_active is False
 
     def test_admin_cannot_deactivate_own_account(self):
         response = self.client.patch(

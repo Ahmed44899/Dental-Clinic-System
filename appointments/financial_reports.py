@@ -1,3 +1,5 @@
+from clinics.api import clinic_for
+
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal
@@ -46,7 +48,7 @@ class FinancialReportView(APIView):
             raise ValidationError({'currency': 'Currency must be USD or EGP.'})
 
         dentist_id = request.query_params.get('dentist') or None
-        if is_dentist(request.user) and not is_clinic_admin(request.user):
+        if is_dentist(request) and not is_clinic_admin(request):
             dentist_id = request.user.pk
         elif dentist_id:
             try:
@@ -54,8 +56,9 @@ class FinancialReportView(APIView):
             except ValueError as exc:
                 raise ValidationError({'dentist': 'Dentist must be a numeric ID.'}) from exc
 
-        invoice_filter = {'invoice__currency': currency}
-        direct_invoice_filter = {'currency': currency}
+        clinic = clinic_for(request)
+        invoice_filter = {'invoice__currency': currency, 'clinic': clinic, 'invoice__clinic': clinic, 'invoice__appointment__clinic': clinic}
+        direct_invoice_filter = {'currency': currency, 'clinic': clinic, 'appointment__clinic': clinic}
         if dentist_id:
             invoice_filter['invoice__appointment__dentist_id'] = dentist_id
             direct_invoice_filter['appointment__dentist_id'] = dentist_id
@@ -108,7 +111,7 @@ class FinancialReportView(APIView):
             dentist.pk: dentist
             for dentist in get_user_model().objects.filter(pk__in=dentist_ids)
         }
-        available_dentists = get_user_model().objects.filter(role='dentist').order_by(
+        available_dentists = get_user_model().objects.filter(clinic_memberships__clinic=clinic, clinic_memberships__role='dentist').order_by(
             'first_name', 'last_name', 'username'
         )
         if dentist_id:
@@ -160,7 +163,7 @@ class FinancialReportView(APIView):
                 {
                     'id': dentist.pk,
                     'name': dentist.get_full_name() or dentist.username,
-                    'is_active': dentist.is_active,
+                    'is_active': dentist.is_active and dentist.clinic_memberships.get(clinic=clinic).is_active,
                 }
                 for dentist in available_dentists
             ],

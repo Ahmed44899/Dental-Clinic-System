@@ -11,4 +11,4 @@ def create_invoice_on_appointment(sender, instance, created, **kwargs):
     create duplicate invoices when the appointment is edited later.
     """
     if created:
-        Invoice.objects.create(appointment=instance)
+        Invoice.objects.create(appointment=instance, clinic_id=instance.clinic_id)

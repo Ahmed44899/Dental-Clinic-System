@@ -31,7 +31,7 @@ class PatientSerializer(serializers.ModelSerializer):
         protected_fields = {'allergies', 'medical_notes'}
         attempted_fields = protected_fields.intersection(self.initial_data.keys())
 
-        if request and is_receptionist(request.user) and attempted_fields:
+        if request and is_receptionist(request) and attempted_fields:
             raise serializers.ValidationError({
                 field: 'Receptionists may view but not modify clinical information.'
                 for field in sorted(attempted_fields)

@@ -1,3 +1,7 @@
+from clinics.api import clinic_for
+from patients.models import PatientProfile
+from appointments.models import Appointment
+
 import cloudinary.uploader
 from PIL import Image, UnidentifiedImageError
 from django.conf import settings
@@ -26,6 +30,18 @@ class XRaySerializer(serializers.ModelSerializer):
             'id', 'image_local', 'image_cloud', 'storage_type',
             'source', 'external_id', 'imported_at',
         ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get('request')
+        self.fields['patient'].queryset = (
+            PatientProfile.objects.filter(clinic=clinic_for(request))
+            if request else PatientProfile.objects.none()
+        )
+        self.fields['appointment'].queryset = (
+            Appointment.objects.filter(clinic=clinic_for(request))
+            if request else Appointment.objects.none()
+        )
 
     def _protected_image_url(self, obj):
         path = reverse('xray-image', kwargs={'pk': obj.pk})
@@ -92,7 +108,7 @@ class XRaySerializer(serializers.ModelSerializer):
                 upload_result = cloudinary.uploader.upload(
                     image_file,
                     folder=(
-                        'dental_clinic/xrays/'
+                        f"dental_clinic/clinic_{validated_data['clinic'].pk}/xrays/"
                         f"patient_{validated_data['patient'].id}"
                     ),
                     resource_type='image',
