@@ -1,0 +1,6 @@
+{
+  "containerOverrides": [{
+    "name": "web",
+    "command": ["python", "manage.py", "audit_clinic_ownership"]
+  }]
+}

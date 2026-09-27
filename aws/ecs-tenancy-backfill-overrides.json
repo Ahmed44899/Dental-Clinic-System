@@ -1,0 +1,6 @@
+{
+  "containerOverrides": [{
+    "name": "web",
+    "command": ["python", "manage.py", "migrate", "clinics", "0002", "--noinput"]
+  }]
+}
